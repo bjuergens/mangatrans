@@ -7,15 +7,11 @@ MangaTrans — a PWA for learning Japanese by translating manga. See `vision.md`
 ## Commands
 
 ```bash
-# Dev
-npm run dev              # Start Vite dev server
-
 # Build
 npm run build            # Production build
 npm run preview          # Preview production build locally
 
 # Test
-npm run test             # Vitest unit tests (watch mode)
 npm run test:run         # Vitest unit tests (single run)
 npm run test:e2e         # Playwright E2E tests
 
@@ -24,6 +20,10 @@ npm run lint             # ESLint
 npm run format           # Prettier (write)
 npm run format:check     # Prettier (check only)
 npm run typecheck        # tsc --noEmit
+
+# All checks (creates timestamped log folder)
+npm run check            # Runs typecheck → lint → unit tests → E2E tests
+                         # Output goes to logs/<timestamp>/*.log
 ```
 
 ## Development Workflow
@@ -33,11 +33,11 @@ npm run typecheck        # tsc --noEmit
 Run all checks and save baseline logs:
 
 ```bash
-npm run typecheck > logs/typecheck-before.log 2>&1
-npm run lint > logs/lint-before.log 2>&1
-npm run test:run > logs/test-before.log 2>&1
-npm run test:e2e > logs/e2e-before.log 2>&1
+npm run check
+# creates logs/<timestamp>/ with typecheck.log, lint.log, test.log, e2e.log
 ```
+
+Note the timestamp folder name — you'll compare against it later.
 
 ### Implement the feature
 
@@ -45,29 +45,52 @@ Write code. Keep it simple.
 
 ### After implementing
 
-Re-run all checks and compare:
+Re-run checks and compare:
 
 ```bash
-npm run typecheck > logs/typecheck-after.log 2>&1
-npm run lint > logs/lint-after.log 2>&1
-npm run test:run > logs/test-after.log 2>&1
-npm run test:e2e > logs/e2e-after.log 2>&1
+npm run check
+# creates a new logs/<timestamp>/ folder
 
-diff logs/test-before.log logs/test-after.log
-diff logs/e2e-before.log logs/e2e-after.log
+diff logs/<before-timestamp>/test.log logs/<after-timestamp>/test.log
+diff logs/<before-timestamp>/e2e.log logs/<after-timestamp>/e2e.log
 ```
 
 Verify: new tests pass, existing tests still pass, no new lint errors, types check.
 
 ## Design Philosophy
 
-- **Lean and fail fast.** Start with the simplest thing that works. Add abstraction only when you have concrete evidence it's needed, not because "it might be useful later."
-- **No cargo cult.** Don't add patterns, layers, or indirection just because "that's how it's done." Every file, class, and function should earn its existence. If you can't explain why a piece of code is there without saying "best practice," delete it.
-- **Big functions are fine.** A 100-line function that does one clear thing is better than 10 tiny functions that require jumping around to understand the flow. Extract only when there is actual reuse or the function is genuinely doing unrelated things.
-- **No premature optimization.** Don't optimize until you've measured. Don't memoize until you've profiled. Don't cache until you've seen a real latency problem.
-- **No premature abstraction.** Three copy-pasted blocks are better than a wrong abstraction. Wait until you see the real pattern before extracting.
-- **Fail loudly.** Throw errors, don't swallow them. Log failures clearly. If something is wrong, the developer should know immediately, not discover it later through subtle misbehavior.
-- **Minimal dependencies.** Every npm package is a liability. Prefer browser APIs and small focused libraries over large frameworks. Justify each dependency.
+- **🎯 Lean and fail fast.** Start with the simplest thing that works. Add abstraction only when you have concrete evidence it's needed, not because "it might be useful later."
+- **🚫 No cargo cult.** Don't add patterns, layers, or indirection just because "that's how it's done." Every file, class, and function should earn its existence. If you can't explain why a piece of code is there without saying "best practice," delete it.
+- **📏 Big functions are fine.** A 100-line function that does one clear thing is better than 10 tiny functions that require jumping around to understand the flow. Extract only when there is actual reuse or the function is genuinely doing unrelated things.
+- **⏳ No premature optimization.** Don't optimize until you've measured. Don't memoize until you've profiled. Don't cache until you've seen a real latency problem.
+- **🧱 No premature abstraction.** Three copy-pasted blocks are better than a wrong abstraction. Wait until you see the real pattern before extracting.
+- **🔊 Fail loudly.** Throw errors, don't swallow them. Log failures clearly. If something is wrong, the developer should know immediately, not discover it later through subtle misbehavior.
+- **📦 Minimal dependencies.** Every npm package is a liability. Prefer browser APIs and small focused libraries over large frameworks. Justify each dependency.
+
+## Emoji Guide
+
+Use emoji in commit messages, log output, and code comments for visual scanning. Be consistent. When introducing a new emoji for a new concept, add it to this table.
+
+| Emoji | Meaning |
+|---|---|
+| ✅ | Test pass / success |
+| ❌ | Test fail / error |
+| 🔨 | Build / tooling |
+| 🧪 | Testing |
+| 📦 | Dependencies / imports / packaging |
+| 🎨 | UI / styling |
+| 📖 | Documentation |
+| 🐛 | Bug fix |
+| ✨ | New feature |
+| ♻️ | Refactor |
+| 🔍 | Search / analysis / extraction |
+| 📝 | Grammar / text / content |
+| 🗑️ | Removal / cleanup |
+| 🚀 | Deploy / release |
+| ⚙️ | Config / settings |
+| 🌐 | Network / API / online |
+| 💾 | Storage / persistence |
+| 🎯 | Core goal / MVP |
 
 ## Code Style
 
@@ -96,7 +119,7 @@ Keep it flat until it hurts. Don't create `utils/`, `helpers/`, `common/`, or `s
 
 ## Git
 
-- Commit messages: short summary line, blank line, body if needed.
+- Commit messages: short summary line, blank line, body if needed. Use emoji prefix.
 - Don't commit `logs/`, `node_modules/`, `dist/`, or `.env` files.
 
 ## CI

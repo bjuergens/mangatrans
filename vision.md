@@ -11,17 +11,8 @@ People who know some Japanese (roughly A1–A2 level) and want to improve by tra
 ## Core Workflow
 
 1. **Import** — User loads a CBZ (or similar archive) into the app. Pages are extracted and stored locally in the browser.
-2. **Browse** — User navigates pages and panels of their comic.
-3. **Extract** — The app identifies text regions (speech bubbles, narration boxes, sound effects) on each page.
-4. **Analyze** — For each text region, the app provides:
-   - Raw extracted text (OCR if needed)
-   - Sentence segmentation
-   - Word-by-word breakdown (reading, dictionary form, part of speech)
-   - Grammar pattern identification and explanation
-   - Vocabulary definitions with common usage notes
-   - Contextual nuance — how meaning shifts given the scene, character, tone, or story so far
-5. **Translate** — The user writes their own translation attempt. The app can offer a reference translation and highlight differences or missed nuances.
-6. **Review** — Vocabulary and grammar encountered can be reviewed across the whole comic.
+2. **Analyze** — The user triggers AI analysis. For each page, the app extracts text regions and generates a full linguistic breakdown upfront. All results are stored locally.
+3. **Study** — The user browses pages and taps on text regions to see the analysis: extracted text, vocabulary, grammar, and (where available) contextual notes. The data flow is simple: AI produces the analysis once, the user consumes it at their own pace.
 
 ## Design Principles
 
@@ -33,22 +24,49 @@ People who know some Japanese (roughly A1–A2 level) and want to improve by tra
 
 ## What Success Looks Like
 
-A user opens a manga chapter, taps through panels, and for each speech bubble can see exactly what every word means, what grammar is at work, and how context changes the interpretation. They write their own translation, compare it to a reference, and over the course of a volume notice that they need the help less and less.
+A user opens a manga chapter, taps through panels, and for each speech bubble can see exactly what every word means, what grammar is at work, and how context changes the interpretation.
 
 ## Scope Boundaries
 
-Things this app is **not** trying to be:
+Things this app **does not do**:
 
-- A general-purpose Japanese dictionary or flashcard app (though it surfaces vocab)
-- A manga reader for casual reading (the focus is on the translation workflow)
-- A machine translation service (the AI assists the learner, it does not replace them)
-- A social platform (no sharing, no accounts, no community features)
+- **Not a conversation with AI** — Analysis is generated upfront in one pass. There is no back-and-forth, no "ask a follow-up question," no iterative feedback loop. Simple data flow: AI produces, user consumes.
+- **Not a translation tool** — The user does not submit translations for grading. The app shows linguistic breakdowns to help the user translate in their head.
+- **Not a flashcard/SRS app** — It surfaces vocabulary in context but does not quiz the user or track spaced repetition.
+- **Not a manga reader** — Reading comfort is secondary to the translation study workflow.
+- **Not a social platform** — No sharing, no accounts, no community features.
 
 ## Language Pairs
 
 Primary and initial focus: **Japanese to English**.
 
 The architecture should not make other language pairs impossible, but there is no plan to actively support them in the near term.
+
+## MVP
+
+The minimum viable product focuses on the simplest useful loop: one page, one text region at a time, no cross-page awareness.
+
+- 📦 **Import CBZ** — Unzip, store pages in IndexedDB.
+- 🔍 **Text extraction** — Send a page image to AI, get back identified text regions with extracted Japanese text.
+- 📖 **Vocabulary breakdown** — For each text region: word-by-word definitions, readings, dictionary forms.
+- 📝 **Grammar breakdown** — For each text region: grammar patterns identified and explained.
+- 🖼️ **Page viewer** — Display the manga page with tappable text region indicators. Tap a region to see its analysis.
+
+Each text region is analyzed **in isolation**. No cross-page context, no character tracking, no story-level awareness. This keeps the AI prompts simple and the data model flat.
+
+## Nice to Have (Post-MVP)
+
+Ordered roughly by value:
+
+1. 🗺️ **Overlay UI** — View the page with toggleable overlays: romaji, literal translation, natural translation, vocab highlights, grammar highlights, cultural notes.
+2. 📚 **Context-aware analysis** — Feed surrounding pages or the whole chapter to the AI for better nuance (who is speaking, tone, callbacks to earlier dialogue).
+3. 🔎 **Vocabulary across manga** — Track all vocabulary encountered across the entire comic. Frequency lists. "Words you've seen before."
+4. 📱 **Manga reader UX** — Zoom, pan, page turn gestures, reading direction (right-to-left), double-page spread support.
+5. ✍️ **User translation input** — Let the user write their own translation attempt and compare against a reference.
+6. 🔄 **Re-analysis with feedback** — Let the user ask follow-up questions about a specific text region or request a re-analysis with additional context.
+7. 🎌 **Furigana rendering** — Show readings above kanji in the extracted text.
+8. 📤 **Anki export** — Export encountered vocabulary as Anki cards.
+9. 📁 **More formats** — PDF, EPUB, raw image folders.
 
 ---
 
@@ -66,7 +84,7 @@ The architecture should not make other language pairs impossible, but there is n
 | Layer | Choice | Rationale |
 |---|---|---|
 | Language | **TypeScript** | Type safety across the whole app; good tooling. |
-| Framework | **React** (via Vite) | Large ecosystem, good PWA tooling, widely understood. |
+| Framework | **React** (via Vite) | Large ecosystem, good PWA tooling, widely understood. Build tool only — no dev server in workflow. |
 | PWA | **Vite PWA plugin** (vite-plugin-pwa / Workbox) | Generates service worker, handles caching and offline support with minimal config. |
 | Styling | **Tailwind CSS** | Utility-first, responsive out of the box, small bundle with purging. |
 | Local storage | **IndexedDB** via **Dexie.js** | IndexedDB can store large blobs (manga pages as images). Dexie provides a clean Promise-based API over the raw IndexedDB interface. |
@@ -81,24 +99,28 @@ The architecture should not make other language pairs impossible, but there is n
 
 ## Data Model (High Level)
 
-All data is stored in IndexedDB.
+All data is stored in IndexedDB. Simple and flat for MVP.
 
 - **Comic** — metadata (title, page count, import date)
 - **Page** — belongs to a Comic; stores the image blob and page number
 - **TextRegion** — belongs to a Page; stores bounding box coordinates, extracted text, region type (bubble, narration, sfx)
-- **Analysis** — belongs to a TextRegion; stores the full AI analysis result (grammar breakdown, vocab, nuance, reference translation, contextual notes)
-- **UserTranslation** — belongs to a TextRegion; the user's own translation attempt
+- **Analysis** — belongs to a TextRegion; stores the full AI analysis result (vocab breakdown, grammar explanation)
 - **Settings** — API key, display preferences
 
 ## AI Analysis Strategy
 
-Analysis happens in stages, each stored separately so partial progress is preserved and the user is not re-charged for repeated API calls:
+Analysis is **upfront and one-shot**. The user triggers it, the AI produces results, and the app stores them. No back-and-forth.
 
-1. **Page scan** (vision) — Send the page image to Claude. Identify text regions and their bounding boxes. Extract raw Japanese text via OCR. Classify regions (dialogue, narration, sound effect).
-2. **Text analysis** (text) — For each extracted text region, ask Claude to provide: sentence segmentation, morphological breakdown, grammar patterns, vocabulary definitions, and nuance notes.
-3. **Contextual analysis** (text) — Once multiple pages are analyzed, a follow-up pass can incorporate story context (who is speaking, what happened previously) to refine nuance explanations.
+**MVP** — two stages per page, each cached in IndexedDB:
+
+1. **Page scan** (vision) — Send the page image to Claude. Identify text regions and their bounding boxes. Extract raw Japanese text. Classify regions (dialogue, narration, sound effect).
+2. **Text analysis** (text) — For each extracted text region: word-by-word vocabulary breakdown (reading, dictionary form, part of speech, definition) and grammar pattern identification with explanations.
 
 Each stage's results are cached in IndexedDB. If the user re-opens a page, the stored analysis is shown instantly with no API call.
+
+**Post-MVP** — optional third stage:
+
+3. **Contextual analysis** (text) — Feed surrounding pages to the AI for cross-page context: who is speaking, tone shifts, callbacks to earlier dialogue, cultural nuance.
 
 ## Offline Strategy
 
@@ -134,17 +156,7 @@ The reader component adapts based on viewport width. Tailwind breakpoints handle
 
 ## Build and Deployment
 
-- **Vite** for dev server and production build.
+- **Vite** for production build.
 - Output is static files (HTML + JS + CSS + service worker).
 - Deployed to **GitHub Pages** via GitHub Actions on push to `main`.
-
-## What We Are Not Building Yet
-
-These are future considerations, not current scope:
-
-- Furigana rendering on extracted text
-- Anki/SRS export of encountered vocabulary
-- Panel-by-panel navigation (vs. full-page view)
-- Multiple manga format support beyond CBZ (PDF, EPUB, raw images)
-- Collaborative translation or sharing features
-- Custom prompt tuning for the AI analysis
+- Development feedback loop is test-driven (unit + E2E), not dev-server-driven.
