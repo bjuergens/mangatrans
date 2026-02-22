@@ -75,6 +75,9 @@ The architecture should not make other language pairs impossible, but there is n
 | AI API | **Anthropic Claude API** (direct fetch) | Vision capability for analyzing manga pages (OCR, panel detection, text extraction). Text capability for grammar/vocab analysis. Called directly from the browser using the user's API key. |
 | State management | **Zustand** or React context | Lightweight; no boilerplate. Zustand if state grows complex, plain context if it stays simple. |
 | Routing | **React Router** | Standard client-side routing for the different views (library, reader, analysis). |
+| Unit tests | **Vitest** | Same config as Vite, fast, native ESM and TypeScript support. |
+| E2E tests | **Playwright** | Cross-browser, good PWA/service worker support, captures console logs. |
+| Linting | **ESLint** + **Prettier** | Standard TS/React linting and formatting. |
 
 ## Data Model (High Level)
 
@@ -105,6 +108,10 @@ Each stage's results are cached in IndexedDB. If the user re-opens a page, the s
 - AI API calls are the only network-dependent operation. The UI clearly indicates which pages/regions have been analyzed and which still need an API call.
 - If the user is offline and tries to trigger analysis, the app shows a clear message rather than failing silently.
 
+## Service Worker Update Flow
+
+When a new version is deployed, the service worker detects the update in the background. The app shows a **toast notification** telling the user a new version is available, with an **"Update" button**. Clicking the button activates the new service worker and reloads the page. The user is never force-reloaded — they choose when to update. This is supported out of the box by vite-plugin-pwa's `registerSW({ onNeedRefresh })` callback.
+
 ## Responsive Design
 
 - **Phone** — Single-column layout. Page image fills the screen; text regions are tappable overlays. Analysis appears as a bottom sheet.
@@ -113,12 +120,23 @@ Each stage's results are cached in IndexedDB. If the user re-opens a page, the s
 
 The reader component adapts based on viewport width. Tailwind breakpoints handle the layout shifts.
 
+## Testing
+
+- **Vitest** for unit and integration tests. Runs in the same Vite pipeline, no separate config.
+- **Playwright** for end-to-end tests. E2E tests capture browser console output to text files so failures can be debugged from logs alone.
+- Tests run locally and in CI. No test should require network access or an API key — mock AI responses where needed.
+
+## CI/CD (GitHub Actions)
+
+- **PR checks** — On every PR: lint (ESLint + Prettier), type-check (`tsc --noEmit`), unit tests (Vitest), E2E tests (Playwright). All must pass before merge. Test output and browser console logs are uploaded as artifacts.
+- **Deploy** — On push to `main`: build the app, deploy to **GitHub Pages** via the `peaceiris/actions-gh-pages` action (or similar). The deployed site is public.
+- Build injects a **build timestamp** (ISO 8601) at compile time (e.g. via Vite's `define` or an env variable). This timestamp is displayed somewhere in the app UI (footer, settings, about screen) so users can see which version they're running.
+
 ## Build and Deployment
 
 - **Vite** for dev server and production build.
 - Output is static files (HTML + JS + CSS + service worker).
-- Can be deployed to any static host (GitHub Pages, Netlify, Vercel, Cloudflare Pages) or run from `file://` via the service worker.
-- No CI/CD required initially — deploy is just pushing static files.
+- Deployed to **GitHub Pages** via GitHub Actions on push to `main`.
 
 ## What We Are Not Building Yet
 
