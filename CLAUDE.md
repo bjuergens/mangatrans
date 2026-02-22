@@ -99,6 +99,7 @@ Use emoji in commit messages, log output, and code comments for visual scanning.
 - Name things clearly. If a name needs a comment to explain it, rename it.
 - No dead code. No commented-out code. No TODO comments without a linked issue.
 - Error messages should include enough context to debug without a debugger.
+- **Async: Promises only.** All async code uses `async`/`await`. No event emitters, no observables, no polling, no callback patterns. If a library uses a different paradigm, wrap it in a Promise at the integration boundary.
 
 ## File Structure
 

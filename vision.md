@@ -47,7 +47,7 @@ The architecture should not make other language pairs impossible, but there is n
 The minimum viable product focuses on the simplest useful loop: one page, one text region at a time, no cross-page awareness.
 
 - 📦 **Import CBZ** — Unzip, store pages in IndexedDB.
-- 🔍 **Text extraction** — Send a page image to AI, get back identified text regions with extracted Japanese text.
+- 🔍 **Text extraction** — Two options: (1) Send a page image to AI vision, get back identified text regions with extracted Japanese text. (2) Local OCR library running in the browser (no network needed). We'll evaluate which works better — may keep both as user-selectable options.
 - 📖 **Vocabulary breakdown** — For each text region: word-by-word definitions, readings, dictionary forms.
 - 📝 **Grammar breakdown** — For each text region: grammar patterns identified and explained.
 - 🖼️ **Page viewer** — Display the manga page with tappable text region indicators. Tap a region to see its analysis.
@@ -56,17 +56,16 @@ Each text region is analyzed **in isolation**. No cross-page context, no charact
 
 ## Nice to Have (Post-MVP)
 
-Ordered roughly by value:
+Ordered roughly by priority:
 
 1. 🗺️ **Overlay UI** — View the page with toggleable overlays: romaji, literal translation, natural translation, vocab highlights, grammar highlights, cultural notes.
 2. 📚 **Context-aware analysis** — Feed surrounding pages or the whole chapter to the AI for better nuance (who is speaking, tone, callbacks to earlier dialogue).
 3. 🔎 **Vocabulary across manga** — Track all vocabulary encountered across the entire comic. Frequency lists. "Words you've seen before."
 4. 📱 **Manga reader UX** — Zoom, pan, page turn gestures, reading direction (right-to-left), double-page spread support.
-5. ✍️ **User translation input** — Let the user write their own translation attempt and compare against a reference.
-6. 🔄 **Re-analysis with feedback** — Let the user ask follow-up questions about a specific text region or request a re-analysis with additional context.
-7. 🎌 **Furigana rendering** — Show readings above kanji in the extracted text.
+5. 📁 **More formats** — PDF, EPUB, raw image folders.
+6. 🎌 **Furigana rendering** — Show readings above kanji in the extracted text.
+7. 🔄 **Re-analysis with feedback** — Let the user ask follow-up questions about a specific text region or request a re-analysis with additional context.
 8. 📤 **Anki export** — Export encountered vocabulary as Anki cards.
-9. 📁 **More formats** — PDF, EPUB, raw image folders.
 
 ---
 
@@ -78,6 +77,7 @@ Ordered roughly by value:
 - **No authentication** — No user accounts. All data lives in the browser.
 - **User-provided API key** — The user enters their own API key (stored locally) to make AI calls directly from the browser.
 - **Offline after analysis** — Network is only needed when calling the AI API. All imported manga, extracted text, and analysis results are persisted locally so the user can study offline.
+- **Promises/async only** — All async operations use `async`/`await` and Promises. No mixing paradigms (no event emitters, no observables, no polling, no callbacks). If a library uses a different paradigm, wrap it in a Promise at the boundary.
 
 ## Stack
 
@@ -113,7 +113,7 @@ Analysis is **upfront and one-shot**. The user triggers it, the AI produces resu
 
 **MVP** — two stages per page, each cached in IndexedDB:
 
-1. **Page scan** (vision) — Send the page image to Claude. Identify text regions and their bounding boxes. Extract raw Japanese text. Classify regions (dialogue, narration, sound effect).
+1. **Page scan** — Identify text regions and their bounding boxes, extract raw Japanese text, classify regions (dialogue, narration, sound effect). Two extraction backends: (a) AI vision (send page image to Claude) or (b) local OCR library (runs offline in browser). We'll evaluate both and may keep either or both as user-selectable options.
 2. **Text analysis** (text) — For each extracted text region: word-by-word vocabulary breakdown (reading, dictionary form, part of speech, definition) and grammar pattern identification with explanations.
 
 Each stage's results are cached in IndexedDB. If the user re-opens a page, the stored analysis is shown instantly with no API call.
