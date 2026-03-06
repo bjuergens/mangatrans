@@ -16,7 +16,7 @@ People who know some Japanese (roughly A1–A2 level) and want to improve by tra
 
 ## Design Principles
 
-- **Learner-first** — Every feature should help the user understand *why* a sentence means what it means, not just *what* it means.
+- **Learner-first** — Every feature should help the user understand _why_ a sentence means what it means, not just _what_ it means.
 - **Offline-capable** — Once AI analysis is generated, everything works offline. Users only need connectivity for the initial analysis step.
 - **No server, no account** — The app runs entirely in the browser. Users bring their own API key for AI analysis. No data leaves the device except API calls the user explicitly triggers.
 - **Progressive detail** — Show a clean, readable interface by default. Let the user drill into grammar, context, and nuance on demand.
@@ -81,21 +81,21 @@ Ordered roughly by priority:
 
 ## Stack
 
-| Layer | Choice | Rationale |
-|---|---|---|
-| Language | **TypeScript** | Type safety across the whole app; good tooling. |
-| Framework | **React** (via Vite) | Large ecosystem, good PWA tooling, widely understood. Build tool only — no dev server in workflow. |
-| PWA | **Vite PWA plugin** (vite-plugin-pwa / Workbox) | Generates service worker, handles caching and offline support with minimal config. |
-| Styling | **Tailwind CSS** | Utility-first, responsive out of the box, small bundle with purging. |
-| Local storage | **IndexedDB** via **Dexie.js** | IndexedDB can store large blobs (manga pages as images). Dexie provides a clean Promise-based API over the raw IndexedDB interface. |
-| CBZ handling | **JSZip** | CBZ files are ZIP archives of images. JSZip can unzip them in the browser. |
-| Image viewing | **Canvas / native `<img>`** | Pages are displayed as images. For region selection (text boxes), an overlay canvas or SVG layer on top of the page image. |
-| AI API | **Anthropic Claude API** (direct fetch) | Vision capability for analyzing manga pages (OCR, panel detection, text extraction). Text capability for grammar/vocab analysis. Called directly from the browser using the user's API key. |
-| State management | **Zustand** or React context | Lightweight; no boilerplate. Zustand if state grows complex, plain context if it stays simple. |
-| Routing | **React Router** | Standard client-side routing for the different views (library, reader, analysis). |
-| Unit tests | **Vitest** | Same config as Vite, fast, native ESM and TypeScript support. |
-| E2E tests | **Playwright** | Cross-browser, good PWA/service worker support, captures console logs. |
-| Linting | **ESLint** + **Prettier** | Standard TS/React linting and formatting. |
+| Layer            | Choice                                          | Rationale                                                                                                                                                                                   |
+| ---------------- | ----------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Language         | **TypeScript**                                  | Type safety across the whole app; good tooling.                                                                                                                                             |
+| Framework        | **React** (via Vite)                            | Large ecosystem, good PWA tooling, widely understood. Build tool only — no dev server in workflow.                                                                                          |
+| PWA              | **Vite PWA plugin** (vite-plugin-pwa / Workbox) | Generates service worker, handles caching and offline support with minimal config.                                                                                                          |
+| Styling          | **Tailwind CSS**                                | Utility-first, responsive out of the box, small bundle with purging.                                                                                                                        |
+| Local storage    | **IndexedDB** via **Dexie.js**                  | IndexedDB can store large blobs (manga pages as images). Dexie provides a clean Promise-based API over the raw IndexedDB interface.                                                         |
+| CBZ handling     | **JSZip**                                       | CBZ files are ZIP archives of images. JSZip can unzip them in the browser.                                                                                                                  |
+| Image viewing    | **Canvas / native `<img>`**                     | Pages are displayed as images. For region selection (text boxes), an overlay canvas or SVG layer on top of the page image.                                                                  |
+| AI API           | **Anthropic Claude API** (direct fetch)         | Vision capability for analyzing manga pages (OCR, panel detection, text extraction). Text capability for grammar/vocab analysis. Called directly from the browser using the user's API key. |
+| State management | **Zustand** or React context                    | Lightweight; no boilerplate. Zustand if state grows complex, plain context if it stays simple.                                                                                              |
+| Routing          | **React Router**                                | Standard client-side routing for the different views (library, reader, analysis).                                                                                                           |
+| Unit tests       | **Vitest**                                      | Same config as Vite, fast, native ESM and TypeScript support.                                                                                                                               |
+| E2E tests        | **Playwright**                                  | Cross-browser, good PWA/service worker support, captures console logs.                                                                                                                      |
+| Linting          | **ESLint** + **Prettier**                       | Standard TS/React linting and formatting.                                                                                                                                                   |
 
 ## Data Model (High Level)
 
