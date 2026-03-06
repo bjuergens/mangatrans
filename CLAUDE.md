@@ -71,26 +71,26 @@ Verify: new tests pass, existing tests still pass, no new lint errors, types che
 
 Use emoji in commit messages, log output, and code comments for visual scanning. Be consistent. When introducing a new emoji for a new concept, add it to this table.
 
-| Emoji | Meaning |
-|---|---|
-| ✅ | Test pass / success |
-| ❌ | Test fail / error |
-| 🔨 | Build / tooling |
-| 🧪 | Testing |
-| 📦 | Dependencies / imports / packaging |
-| 🎨 | UI / styling |
-| 📖 | Documentation |
-| 🐛 | Bug fix |
-| ✨ | New feature |
-| ♻️ | Refactor |
-| 🔍 | Search / analysis / extraction |
-| 📝 | Grammar / text / content |
-| 🗑️ | Removal / cleanup |
-| 🚀 | Deploy / release |
-| ⚙️ | Config / settings |
-| 🌐 | Network / API / online |
-| 💾 | Storage / persistence |
-| 🎯 | Core goal / MVP |
+| Emoji | Meaning                            |
+| ----- | ---------------------------------- |
+| ✅    | Test pass / success                |
+| ❌    | Test fail / error                  |
+| 🔨    | Build / tooling                    |
+| 🧪    | Testing                            |
+| 📦    | Dependencies / imports / packaging |
+| 🎨    | UI / styling                       |
+| 📖    | Documentation                      |
+| 🐛    | Bug fix                            |
+| ✨    | New feature                        |
+| ♻️    | Refactor                           |
+| 🔍    | Search / analysis / extraction     |
+| 📝    | Grammar / text / content           |
+| 🗑️    | Removal / cleanup                  |
+| 🚀    | Deploy / release                   |
+| ⚙️    | Config / settings                  |
+| 🌐    | Network / API / online             |
+| 💾    | Storage / persistence              |
+| 🎯    | Core goal / MVP                    |
 
 ## Code Style
 
