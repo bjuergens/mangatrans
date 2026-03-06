@@ -32,7 +32,7 @@ jobs:
       - run: mkdir -p build-logs
 
       - name: Install Playwright
-        run: npx playwright install --with-deps chromium 2>&1 | tee build-logs/playwright-install.log
+        run: npx playwright install --with-deps chromium > build-logs/playwright-install.log 2>&1
         shell: bash
 
       - name: Typecheck
