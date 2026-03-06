@@ -6,3 +6,4 @@ logs/
 *.local
 test-results/
 playwright-report/
+build-logs/

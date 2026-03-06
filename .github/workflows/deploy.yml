@@ -1,0 +1,74 @@
+name: Deploy
+
+on:
+  push:
+    branches: [main, master]
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - run: npm ci
+
+      - name: Install Playwright
+        run: npx playwright install --with-deps chromium
+
+      - run: mkdir -p build-logs
+
+      - name: Typecheck
+        run: npm run typecheck 2>&1 | tee build-logs/typecheck.log
+        shell: bash
+
+      - name: Lint
+        run: npm run lint 2>&1 | tee build-logs/lint.log
+        shell: bash
+
+      - name: Format check
+        run: npm run format:check 2>&1 | tee build-logs/format.log
+        shell: bash
+
+      - name: Unit tests
+        run: npm run test:run 2>&1 | tee build-logs/test.log
+        shell: bash
+
+      - name: Build
+        run: npm run build 2>&1 | tee build-logs/build.log
+        shell: bash
+        env:
+          BASE_URL: /${{ github.event.repository.name }}/
+
+      - name: E2E tests
+        run: npm run test:e2e 2>&1 | tee build-logs/e2e.log
+        shell: bash
+
+      - name: Generate build report
+        if: always()
+        run: bash scripts/build-report.sh
+
+      - name: Upload Pages artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: dist
+
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4
