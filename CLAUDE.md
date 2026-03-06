@@ -125,4 +125,6 @@ Keep it flat until it hurts. Don't create `utils/`, `helpers/`, `common/`, or `s
 
 ## CI
 
-PR checks run: typecheck → lint → unit tests → E2E tests. All must pass.
+PR checks run: typecheck → lint → format → unit tests → E2E tests. All must pass.
+
+Deploy (push to `main`): same checks with output captured to `build-logs/`, then `scripts/build-report.sh` generates `dist/build/index.html` from those logs before deploying to GitHub Pages. The `/build` path on the live site shows that report.

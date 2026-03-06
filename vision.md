@@ -151,7 +151,7 @@ The reader component adapts based on viewport width. Tailwind breakpoints handle
 ## CI/CD (GitHub Actions)
 
 - **PR checks** — On every PR: lint (ESLint + Prettier), type-check (`tsc --noEmit`), unit tests (Vitest), E2E tests (Playwright). All must pass before merge. Test output and browser console logs are uploaded as artifacts.
-- **Deploy** — On push to `main`: build the app, deploy to **GitHub Pages** via the `peaceiris/actions-gh-pages` action (or similar). The deployed site is public.
+- **Deploy** — On push to `main`: run all checks capturing output, build the app, generate a build report page at `/build`, deploy to **GitHub Pages** via the official `actions/deploy-pages` action. The root URL serves the PWA; `/build` shows a static HTML page with the output from every check step (typecheck, lint, format, unit tests, build, E2E).
 - Build injects a **build timestamp** (ISO 8601) at compile time (e.g. via Vite's `define` or an env variable). This timestamp is displayed somewhere in the app UI (footer, settings, about screen) so users can see which version they're running.
 
 ## Build and Deployment
