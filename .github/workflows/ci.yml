@@ -15,7 +15,7 @@ jobs:
           node-version: 22
           cache: npm
 
-      - run: npm ci
+      - run: npm ci --no-audit --no-fund
 
       - name: Typecheck
         run: npm run typecheck
@@ -30,7 +30,8 @@ jobs:
         run: npm run test:run
 
       - name: Install Playwright
-        run: npx playwright install --with-deps chromium
+        run: npx playwright install --with-deps chromium 2>&1 | tee playwright-install.log
+        shell: bash
 
       - name: Build
         run: npm run build
@@ -46,4 +47,5 @@ jobs:
           path: |
             test-results/
             playwright-report/
+            playwright-install.log
           retention-days: 7

@@ -27,12 +27,13 @@ jobs:
           node-version: 22
           cache: npm
 
-      - run: npm ci
-
-      - name: Install Playwright
-        run: npx playwright install --with-deps chromium
+      - run: npm ci --no-audit --no-fund
 
       - run: mkdir -p build-logs
+
+      - name: Install Playwright
+        run: npx playwright install --with-deps chromium 2>&1 | tee build-logs/playwright-install.log
+        shell: bash
 
       - name: Typecheck
         run: npm run typecheck 2>&1 | tee build-logs/typecheck.log
