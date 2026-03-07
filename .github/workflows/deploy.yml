@@ -22,41 +22,13 @@ jobs:
           node-version: 22
           cache: npm
 
-      - run: mkdir -p build-logs
-
       - name: Setup
-        run: npm run setup 2>&1 | tee build-logs/setup.log
-        shell: bash
+        run: npm run setup
 
-      - name: Typecheck
-        run: npm run check:typecheck 2>&1 | tee build-logs/typecheck.log
-        shell: bash
-
-      - name: Lint
-        run: npm run check:lint 2>&1 | tee build-logs/lint.log
-        shell: bash
-
-      - name: Format check
-        run: npm run check:format 2>&1 | tee build-logs/format.log
-        shell: bash
-
-      - name: Unit tests
-        run: npm run check:test 2>&1 | tee build-logs/test.log
-        shell: bash
-
-      - name: Build
-        run: npm run check:build 2>&1 | tee build-logs/build.log
-        shell: bash
+      - name: Run all checks
+        run: npm run check:all
         env:
           BASE_URL: /${{ github.event.repository.name }}/
-
-      - name: E2E tests
-        run: npm run check:test:e2e 2>&1 | tee build-logs/e2e.log
-        shell: bash
-
-      - name: Generate build report
-        if: always()
-        run: bash scripts/build-report.sh
 
       - name: Deploy to GitHub Pages
         uses: JamesIves/github-pages-deploy-action@v4
