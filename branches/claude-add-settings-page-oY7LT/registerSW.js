@@ -1,0 +1,1 @@
+if('serviceWorker' in navigator) {window.addEventListener('load', () => {navigator.serviceWorker.register('/mangatrans/branches/claude-add-settings-page-oY7LT/sw.js', { scope: '/mangatrans/branches/claude-add-settings-page-oY7LT/' })})}
