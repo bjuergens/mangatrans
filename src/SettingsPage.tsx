@@ -1,34 +1,196 @@
-// SettingsPage — user preferences and API key management.
-// Will contain: Anthropic API key input (stored in IndexedDB via db.settings),
-// display preferences, and build version info.
+import { useState, useEffect } from "react";
+import { db } from "./db";
+
+type TextExtractionBackend = "ai-vision" | "local-ocr";
+type AnalysisDetailLevel = "basic" | "detailed";
 
 export default function SettingsPage() {
+  const [apiKey, setApiKey] = useState("");
+  const [savedApiKey, setSavedApiKey] = useState("");
+  const [textExtraction, setTextExtraction] =
+    useState<TextExtractionBackend>("ai-vision");
+  const [analysisDetail, setAnalysisDetail] =
+    useState<AnalysisDetailLevel>("detailed");
+  const [saving, setSaving] = useState(false);
+  const [loaded, setLoaded] = useState(false);
+
+  useEffect(() => {
+    async function load() {
+      const [apiKeySetting, extractionSetting, detailSetting] =
+        await Promise.all([
+          db.settings.get("apiKey"),
+          db.settings.get("textExtractionBackend"),
+          db.settings.get("analysisDetailLevel"),
+        ]);
+      if (apiKeySetting) {
+        setApiKey(apiKeySetting.value);
+        setSavedApiKey(apiKeySetting.value);
+      }
+      if (extractionSetting) {
+        setTextExtraction(extractionSetting.value as TextExtractionBackend);
+      }
+      if (detailSetting) {
+        setAnalysisDetail(detailSetting.value as AnalysisDetailLevel);
+      }
+      setLoaded(true);
+    }
+    load();
+  }, []);
+
+  async function saveApiKey() {
+    setSaving(true);
+    await db.settings.put({ key: "apiKey", value: apiKey.trim() });
+    setSavedApiKey(apiKey.trim());
+    setSaving(false);
+  }
+
+  async function clearApiKey() {
+    await db.settings.delete("apiKey");
+    setApiKey("");
+    setSavedApiKey("");
+  }
+
+  async function saveTextExtraction(value: TextExtractionBackend) {
+    setTextExtraction(value);
+    await db.settings.put({ key: "textExtractionBackend", value });
+  }
+
+  async function saveAnalysisDetail(value: AnalysisDetailLevel) {
+    setAnalysisDetail(value);
+    await db.settings.put({ key: "analysisDetailLevel", value });
+  }
+
+  const apiKeyDirty = apiKey.trim() !== savedApiKey;
+
+  if (!loaded) return null;
+
   return (
-    <div className="p-4">
-      <h1 className="mb-4 text-2xl font-bold">Settings</h1>
+    <div className="mx-auto max-w-xl p-4">
+      <h1 className="mb-6 text-2xl font-bold">Settings</h1>
 
-      {/* API key input: stored in IndexedDB as a Setting { key: "apiKey", value: "..." }
-          The key is only used for direct browser-to-API calls the user explicitly triggers. */}
-      <div className="mb-6">
-        <label className="mb-1 block text-sm font-medium text-gray-700">
-          Anthropic API Key
-        </label>
-        <p className="mb-2 text-sm text-gray-500">
-          Your API key is stored locally and never sent to any server except
-          Anthropic&apos;s API.
+      {/* API Key */}
+      <section className="mb-8">
+        <h2 className="mb-2 text-lg font-semibold">Anthropic API Key</h2>
+        <p className="mb-3 text-sm text-gray-500">
+          Your API key is stored locally in your browser and only sent to
+          Anthropic&apos;s API when you trigger analysis.
         </p>
-        <input
-          type="password"
-          placeholder="sk-ant-..."
-          className="w-full rounded border px-3 py-2"
-          readOnly
-        />
-      </div>
+        <div className="flex gap-2">
+          <input
+            type="password"
+            value={apiKey}
+            onChange={(e) => setApiKey(e.target.value)}
+            placeholder="sk-ant-..."
+            className="flex-1 rounded border px-3 py-2"
+            data-testid="api-key-input"
+          />
+          <button
+            onClick={saveApiKey}
+            disabled={saving || !apiKeyDirty || !apiKey.trim()}
+            className="rounded bg-blue-600 px-4 py-2 text-white hover:bg-blue-700 disabled:opacity-50"
+            data-testid="save-api-key"
+          >
+            {saving ? "Saving..." : "Save"}
+          </button>
+        </div>
+        {savedApiKey && (
+          <div className="mt-2 flex items-center gap-2">
+            <span className="text-sm text-green-600">API key saved</span>
+            <button
+              onClick={clearApiKey}
+              className="text-sm text-red-500 hover:underline"
+              data-testid="clear-api-key"
+            >
+              Clear
+            </button>
+          </div>
+        )}
+      </section>
 
-      {/* Display preferences: will include options for analysis detail level,
-          overlay visibility, etc. */}
+      {/* Text Extraction Backend */}
+      <section className="mb-8">
+        <h2 className="mb-2 text-lg font-semibold">Text Extraction</h2>
+        <p className="mb-3 text-sm text-gray-500">
+          How text is extracted from manga pages.
+        </p>
+        <div className="space-y-2">
+          <label className="flex items-center gap-2">
+            <input
+              type="radio"
+              name="textExtraction"
+              value="ai-vision"
+              checked={textExtraction === "ai-vision"}
+              onChange={() => saveTextExtraction("ai-vision")}
+            />
+            <span>
+              <span className="font-medium">AI Vision</span>
+              <span className="ml-1 text-sm text-gray-500">
+                — send page to Claude for OCR (requires API key)
+              </span>
+            </span>
+          </label>
+          <label className="flex items-center gap-2">
+            <input
+              type="radio"
+              name="textExtraction"
+              value="local-ocr"
+              checked={textExtraction === "local-ocr"}
+              onChange={() => saveTextExtraction("local-ocr")}
+            />
+            <span>
+              <span className="font-medium">Local OCR</span>
+              <span className="ml-1 text-sm text-gray-500">
+                — runs in browser, no network needed
+              </span>
+            </span>
+          </label>
+        </div>
+      </section>
 
-      <p className="mt-8 text-xs text-gray-400">Build: {__BUILD_TIMESTAMP__}</p>
+      {/* Analysis Detail Level */}
+      <section className="mb-8">
+        <h2 className="mb-2 text-lg font-semibold">Analysis Detail</h2>
+        <p className="mb-3 text-sm text-gray-500">
+          How much detail to include in vocabulary and grammar breakdowns.
+        </p>
+        <div className="space-y-2">
+          <label className="flex items-center gap-2">
+            <input
+              type="radio"
+              name="analysisDetail"
+              value="basic"
+              checked={analysisDetail === "basic"}
+              onChange={() => saveAnalysisDetail("basic")}
+            />
+            <span>
+              <span className="font-medium">Basic</span>
+              <span className="ml-1 text-sm text-gray-500">
+                — word definitions and key grammar only
+              </span>
+            </span>
+          </label>
+          <label className="flex items-center gap-2">
+            <input
+              type="radio"
+              name="analysisDetail"
+              value="detailed"
+              checked={analysisDetail === "detailed"}
+              onChange={() => saveAnalysisDetail("detailed")}
+            />
+            <span>
+              <span className="font-medium">Detailed</span>
+              <span className="ml-1 text-sm text-gray-500">
+                — full breakdowns with readings, conjugations, and nuance
+              </span>
+            </span>
+          </label>
+        </div>
+      </section>
+
+      {/* Build Info */}
+      <p className="mt-8 text-xs text-gray-400">
+        Build: {__BUILD_TIMESTAMP__}
+      </p>
     </div>
   );
 }

@@ -35,7 +35,7 @@ export default defineConfig({
   },
   test: {
     environment: "jsdom",
-    setupFiles: ["fake-indexeddb/auto"],
+    setupFiles: ["fake-indexeddb/auto", "@testing-library/jest-dom/vitest"],
     include: ["src/**/*.test.{ts,tsx}"],
   },
 });
