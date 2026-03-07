@@ -1,0 +1,8 @@
+
+> mangatrans@0.0.1 check:test:e2e
+> playwright test
+
+
+Running 10 tests using 1 worker
+··········
+  10 passed (4.7s)

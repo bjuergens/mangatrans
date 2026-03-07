@@ -1,0 +1,4 @@
+
+> mangatrans@0.0.1 check:typecheck
+> tsc --noEmit
+
