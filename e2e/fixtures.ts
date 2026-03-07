@@ -9,7 +9,17 @@ export const test = base.extend<{ captureConsole: void }>({
         messages.push(`[${msg.type()}] ${msg.text()}`);
       });
 
+      const start = Date.now();
+      console.log(`🧪 START: ${testInfo.title}`);
+
       await use();
+
+      const elapsed = ((Date.now() - start) / 1000).toFixed(1);
+      const status =
+        testInfo.status === "passed"
+          ? "✅ PASS"
+          : `❌ ${testInfo.status?.toUpperCase()}`;
+      console.log(`${status}: ${testInfo.title} (${elapsed}s)`);
 
       const logPath = testInfo.outputPath("console.txt");
       await fs.promises.writeFile(logPath, messages.join("\n"));
