@@ -1,6 +1,15 @@
 import { defineConfig } from "vite";
+import { execSync } from "child_process";
 import react from "@vitejs/plugin-react";
 import { VitePWA } from "vite-plugin-pwa";
+
+function getGitBranch(): string {
+  try {
+    return execSync("git branch --show-current", { encoding: "utf-8" }).trim();
+  } catch {
+    return "unknown";
+  }
+}
 
 export default defineConfig({
   base: process.env.BASE_URL || "/",
@@ -8,6 +17,9 @@ export default defineConfig({
     react(),
     VitePWA({
       registerType: "prompt",
+      workbox: {
+        navigateFallbackDenylist: [/\/branches\//, /\/ci-logs/],
+      },
       manifest: {
         name: "MangaTrans",
         short_name: "MangaTrans",
@@ -32,6 +44,7 @@ export default defineConfig({
   ],
   define: {
     __BUILD_TIMESTAMP__: JSON.stringify(new Date().toISOString()),
+    __BUILD_BRANCH__: JSON.stringify(getGitBranch()),
   },
   test: {
     environment: "jsdom",

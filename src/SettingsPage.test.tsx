@@ -92,11 +92,16 @@ describe("SettingsPage", () => {
     });
   });
 
-  it("shows build timestamp", async () => {
+  it("shows build timestamp as link to CI logs", async () => {
     renderSettings();
-    await waitFor(() => {
-      expect(screen.getByText(/Build:/)).toBeInTheDocument();
-    });
+    const link = await screen.findByTestId("build-log-link");
+    expect(link).toBeInstanceOf(HTMLAnchorElement);
+    expect(link).toHaveAttribute("href", expect.stringContaining("/branches/"));
+    expect(link).toHaveAttribute(
+      "href",
+      expect.stringContaining("ci-logs.all.txt"),
+    );
+    expect(link).toHaveAttribute("target", "_blank");
   });
 
   it("shows GitHub repo link", async () => {
