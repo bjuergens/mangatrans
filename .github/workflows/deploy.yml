@@ -46,15 +46,19 @@ jobs:
         run: npm run test:run 2>&1 | tee build-logs/test.log
         shell: bash
 
-      - name: Build
-        run: npm run build 2>&1 | tee build-logs/build.log
+      - name: Build (for E2E — base /)
+        run: npm run build 2>&1 | tee build-logs/build-e2e.log
         shell: bash
-        env:
-          BASE_URL: /${{ github.event.repository.name }}/
 
       - name: E2E tests
         run: npm run test:e2e 2>&1 | tee build-logs/e2e.log
         shell: bash
+
+      - name: Build (for deployment — base /repo-name/)
+        run: npm run build 2>&1 | tee build-logs/build.log
+        shell: bash
+        env:
+          BASE_URL: /${{ github.event.repository.name }}/
 
       - name: Generate build report
         if: always()
