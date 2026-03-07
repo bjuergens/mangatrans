@@ -223,7 +223,18 @@ export default function SettingsPage() {
 
       {/* Build Info */}
       <section className="mt-8 border-t border-gray-200 pt-4 text-xs text-gray-400">
-        <p>Build: {__BUILD_TIMESTAMP__}</p>
+        <p>
+          Build:{" "}
+          <a
+            href={`https://bjuergens.github.io/mangatrans/branches/${__BUILD_BRANCH__.replace(/\//g, "-")}/ci-logs.all.txt`}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="text-gray-400 hover:text-gray-600 hover:underline"
+            data-testid="build-log-link"
+          >
+            {__BUILD_TIMESTAMP__}
+          </a>
+        </p>
         <a
           href="https://github.com/bjuergens/mangatrans"
           target="_blank"
