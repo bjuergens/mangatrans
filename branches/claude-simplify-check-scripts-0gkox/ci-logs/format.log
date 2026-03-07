@@ -1,6 +1,0 @@
-
-> mangatrans@0.0.1 check:format
-> prettier --check .
-
-Checking formatting...
-All matched files use Prettier code style!
