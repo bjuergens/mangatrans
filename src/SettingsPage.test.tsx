@@ -96,7 +96,6 @@ describe("SettingsPage", () => {
     renderSettings();
     const link = await screen.findByTestId("build-log-link");
     expect(link).toBeInstanceOf(HTMLAnchorElement);
-    expect(link).toHaveAttribute("href", expect.stringContaining("/branches/"));
     expect(link).toHaveAttribute(
       "href",
       expect.stringContaining("ci-logs.all.txt"),

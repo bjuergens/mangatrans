@@ -226,7 +226,7 @@ export default function SettingsPage() {
         <p>
           Build:{" "}
           <a
-            href={`https://bjuergens.github.io/mangatrans/branches/${__BUILD_BRANCH__.replace(/\//g, "-")}/ci-logs.all.txt`}
+            href={`${import.meta.env.BASE_URL}ci-logs.all.txt`}
             target="_blank"
             rel="noopener noreferrer"
             className="text-gray-400 hover:text-gray-600 hover:underline"
