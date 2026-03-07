@@ -14,6 +14,10 @@ export interface Page {
   pageNumber: number;
   /** Manga page image stored as a Blob */
   imageBlob: Blob;
+  /** Visual context description from AI page scan */
+  visualContext?: string;
+  /** Whether this page has been scanned for text regions */
+  scanned?: boolean;
 }
 
 export type RegionType = "dialogue" | "narration" | "sfx";
@@ -46,6 +50,8 @@ export interface Analysis {
   textRegionId: number;
   vocabulary: VocabEntry[];
   grammar: GrammarPoint[];
+  /** Suggested English translation */
+  suggestedTranslation: string;
   /** Raw JSON response from AI for debugging */
   rawResponse: string;
 }
