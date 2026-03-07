@@ -6,16 +6,17 @@
   "description": "PWA for learning Japanese by translating manga",
   "license": "AGPL-3.0-or-later",
   "scripts": {
-    "dev": "vite",
     "build": "tsc --noEmit && vite build",
     "preview": "vite preview",
-    "test:run": "vitest run",
-    "test:e2e": "playwright test",
-    "lint": "eslint .",
-    "format": "prettier --write .",
-    "format:check": "prettier --check .",
-    "typecheck": "tsc --noEmit",
-    "check": "bash scripts/check.sh"
+    "setup": "npm ci --no-audit --no-fund && npx playwright install --with-deps chromium",
+    "check:typecheck": "tsc --noEmit",
+    "check:lint": "eslint .",
+    "check:format": "prettier --check .",
+    "check:test": "vitest run",
+    "check:build": "tsc --noEmit && vite build",
+    "check:test:e2e": "playwright test",
+    "check:all": "npm run check:typecheck && npm run check:lint && npm run check:format && npm run check:test && npm run check:build && npm run check:test:e2e",
+    "format": "prettier --write ."
   },
   "dependencies": {
     "dexie": "^4.0.11",

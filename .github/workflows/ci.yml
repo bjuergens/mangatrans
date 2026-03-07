@@ -15,35 +15,11 @@ jobs:
           node-version: 22
           cache: npm
 
-      - run: npm ci --no-audit --no-fund
+      - name: Setup
+        run: npm run setup
 
-      - run: mkdir -p build-logs
-
-      - name: Typecheck
-        run: npm run typecheck 2>&1 | tee build-logs/typecheck.log
-        shell: bash
-
-      - name: Lint
-        run: npm run lint 2>&1 | tee build-logs/lint.log
-        shell: bash
-
-      - name: Format check
-        run: npm run format:check
-
-      - name: Unit tests
-        run: npm run test:run 2>&1 | tee build-logs/test.log
-        shell: bash
-
-      - name: Install Playwright
-        run: npx playwright install --with-deps chromium > playwright-install.log 2>&1
-        shell: bash
-
-      - name: Build
-        run: npm run build 2>&1 | tee build-logs/build.log
-        shell: bash
-
-      - name: E2E tests
-        run: npm run test:e2e
+      - name: Run all checks
+        run: npm run check:all
 
       - name: Upload test results
         if: always()
@@ -53,6 +29,4 @@ jobs:
           path: |
             test-results/
             playwright-report/
-            playwright-install.log
-            build-logs/
           retention-days: 7

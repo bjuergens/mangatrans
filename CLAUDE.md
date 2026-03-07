@@ -7,52 +7,46 @@ MangaTrans — a PWA for learning Japanese by translating manga. See `vision.md`
 ## Commands
 
 ```bash
-# Build
+# Setup (install deps + Playwright)
+npm run setup            # npm ci + install Playwright chromium
+
+# Individual checks
+npm run check:typecheck  # tsc --noEmit
+npm run check:lint       # ESLint
+npm run check:format     # Prettier (check only)
+npm run check:test       # Vitest unit tests (single run)
+npm run check:build      # Production build
+npm run check:test:e2e   # Playwright E2E tests
+
+# All checks
+npm run check:all        # Runs all checks in sequence
+
+# Other
 npm run build            # Production build
-npm run preview          # Preview production build locally
-
-# Test
-npm run test:run         # Vitest unit tests (single run)
-npm run test:e2e         # Playwright E2E tests
-
-# Lint
-npm run lint             # ESLint
 npm run format           # Prettier (write)
-npm run format:check     # Prettier (check only)
-npm run typecheck        # tsc --noEmit
-
-# All checks (creates timestamped log folder)
-npm run check            # Runs typecheck → lint → unit tests → E2E tests
-                         # Output goes to logs/<timestamp>/*.log
 ```
 
 ## Development Workflow
 
-### Before starting a feature
+### Starting a new task
 
-Run all checks and save baseline logs:
+Always begin by setting up and running all checks:
 
 ```bash
-npm run check
-# creates logs/<timestamp>/ with typecheck.log, lint.log, test.log, e2e.log
+npm run setup
+npm run check:all
 ```
-
-Note the timestamp folder name — you'll compare against it later.
 
 ### Implement the feature
 
 Write code. Keep it simple.
 
-### After implementing
+### Before pushing
 
-Re-run checks and compare:
+Run all checks again and make sure everything passes:
 
 ```bash
-npm run check
-# creates a new logs/<timestamp>/ folder
-
-diff logs/<before-timestamp>/test.log logs/<after-timestamp>/test.log
-diff logs/<before-timestamp>/e2e.log logs/<after-timestamp>/e2e.log
+npm run check:all
 ```
 
 Verify: new tests pass, existing tests still pass, no new lint errors, types check.
