@@ -1,0 +1,26 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <title>MangaTrans</title>
+    <script>
+      // GitHub Pages SPA redirect: encode the path into a query param
+      // so index.html can restore the correct route on load.
+      // See: https://github.com/rafgraph/spa-github-pages
+      var pathSegmentsToKeep = window.location.pathname
+        .split("/")
+        .filter(Boolean);
+      var repo = pathSegmentsToKeep[0]; // e.g. "mangatrans"
+      var rest = "/" + pathSegmentsToKeep.slice(1).join("/");
+      window.location.replace(
+        window.location.origin +
+          "/" +
+          repo +
+          "/?" +
+          rest +
+          window.location.hash,
+      );
+    </script>
+  </head>
+  <body></body>
+</html>

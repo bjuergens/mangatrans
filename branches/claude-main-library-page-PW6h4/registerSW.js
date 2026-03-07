@@ -1,0 +1,1 @@
+if('serviceWorker' in navigator) {window.addEventListener('load', () => {navigator.serviceWorker.register('/mangatrans/branches/claude-main-library-page-PW6h4/sw.js', { scope: '/mangatrans/branches/claude-main-library-page-PW6h4/' })})}
