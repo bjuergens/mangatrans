@@ -37,39 +37,8 @@ jobs:
         run: npm run setup 2>&1 | tee ci-logs/setup.log
         shell: bash
 
-      - name: Typecheck
-        id: typecheck
-        run: npm run check:typecheck 2>&1 | tee ci-logs/typecheck.log
-        shell: bash
-
-      - name: Lint
-        id: lint
-        if: always() && steps.typecheck.outcome != 'skipped'
-        run: npm run check:lint 2>&1 | tee ci-logs/lint.log
-        shell: bash
-
-      - name: Format
-        id: format
-        if: always() && steps.lint.outcome != 'skipped'
-        run: npm run check:format 2>&1 | tee ci-logs/format.log
-        shell: bash
-
-      - name: Unit tests
-        id: test
-        if: always() && steps.format.outcome != 'skipped'
-        run: npm run check:test 2>&1 | tee ci-logs/test.log
-        shell: bash
-
-      - name: Build
-        id: build
-        if: always() && steps.test.outcome != 'skipped'
-        run: npm run check:build 2>&1 | tee ci-logs/build.log
-        shell: bash
-
-      - name: E2E tests
-        id: e2e
-        if: always() && steps.build.outcome != 'skipped'
-        run: npm run check:test:e2e 2>&1 | tee ci-logs/e2e.log
+      - name: Run all checks
+        run: npm run check:all 2>&1 | tee ci-logs/check-all.log
         shell: bash
 
       - name: Generate log index
@@ -79,18 +48,15 @@ jobs:
           COMMIT=$(git rev-parse --short HEAD)
           BRANCH="${{ github.head_ref }}"
 
-          # Build sections from log files
           sections=""
-          for step in setup typecheck lint format test build e2e; do
-            file="ci-logs/$step.log"
-            if [ -f "$file" ]; then
-              content=$(sed 's/&/\&amp;/g; s/</\&lt;/g; s/>/\&gt;/g; s/"/\&quot;/g' "$file")
-              sections="$sections
-              <details open>
-                <summary>$step</summary>
-                <pre>$content</pre>
-              </details>"
-            fi
+          for file in ci-logs/*.log; do
+            name=$(basename "$file" .log)
+            content=$(sed 's/&/\&amp;/g; s/</\&lt;/g; s/>/\&gt;/g; s/"/\&quot;/g' "$file")
+            sections="$sections
+            <details open>
+              <summary>$name</summary>
+              <pre>$content</pre>
+            </details>"
           done
 
           cat > ci-logs/index.html <<HTMLEOF
@@ -149,7 +115,7 @@ jobs:
               owner, repo, issue_number: context.issue.number,
             });
             const existing = comments.find(c =>
-              c.user.login === 'github-actions[bot]' && c.body.includes('CI ')  && c.body.includes('View logs')
+              c.user.login === 'github-actions[bot]' && c.body.includes('CI ') && c.body.includes('View logs')
             );
             if (existing) {
               await github.rest.issues.updateComment({
@@ -171,16 +137,3 @@ jobs:
             playwright-report/
             ci-logs/
           retention-days: 7
-
-      - name: Fail if any check failed
-        if: always()
-        run: |
-          if [ "${{ steps.typecheck.outcome }}" = "failure" ] || \
-             [ "${{ steps.lint.outcome }}" = "failure" ] || \
-             [ "${{ steps.format.outcome }}" = "failure" ] || \
-             [ "${{ steps.test.outcome }}" = "failure" ] || \
-             [ "${{ steps.build.outcome }}" = "failure" ] || \
-             [ "${{ steps.e2e.outcome }}" = "failure" ]; then
-            echo "❌ One or more checks failed"
-            exit 1
-          fi
