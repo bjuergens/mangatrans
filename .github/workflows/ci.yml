@@ -44,22 +44,21 @@ jobs:
       - name: Concat logs
         if: always()
         run: |
+          mkdir -p deploy-ci
           for file in ci-logs/*.log; do
             echo "=== $(basename "$file") ==="
             cat "$file"
             echo ""
-          done > ci-logs.all.txt
-          mkdir -p ci-deploy
-          cp ci-logs.all.txt ci-deploy/
+          done > deploy-ci/ci-logs.all.txt
         shell: bash
 
       - name: Deploy CI logs to GitHub Pages
         if: always()
         uses: JamesIves/github-pages-deploy-action@v4
         with:
-          folder: ci-deploy
-          target-folder: branches/${{ steps.branch.outputs.name }}/ci-logs
-          clean: true
+          folder: deploy-ci
+          target-folder: branches/${{ steps.branch.outputs.name }}
+          clean: false
 
       - name: Comment CI logs link on PR
         if: always()
@@ -69,7 +68,7 @@ jobs:
             const owner = context.repo.owner;
             const repo = context.repo.repo;
             const branch = '${{ steps.branch.outputs.name }}';
-            const logsUrl = `https://${owner}.github.io/${repo}/branches/${branch}/ci-logs/ci-logs.all.txt`;
+            const logsUrl = `https://${owner}.github.io/${repo}/branches/${branch}/ci-logs.all.txt`;
             const passed = '${{ job.status }}' === 'success';
             const icon = passed ? '✅' : '❌';
             const status = passed ? 'passed' : 'failed';
