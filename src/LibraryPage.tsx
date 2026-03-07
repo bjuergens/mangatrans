@@ -33,9 +33,7 @@ export default function LibraryPage() {
 
       {/* CBZ import: will use JSZip to extract pages, store in IndexedDB via db.ts */}
       <div className="rounded-lg border-2 border-dashed border-gray-300 p-8 text-center">
-        <p className="text-gray-400">
-          Drop a CBZ file here or click to browse
-        </p>
+        <p className="text-gray-400">Drop a CBZ file here or click to browse</p>
       </div>
     </div>
   );

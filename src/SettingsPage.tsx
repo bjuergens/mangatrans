@@ -188,9 +188,7 @@ export default function SettingsPage() {
       </section>
 
       {/* Build Info */}
-      <p className="mt-8 text-xs text-gray-400">
-        Build: {__BUILD_TIMESTAMP__}
-      </p>
+      <p className="mt-8 text-xs text-gray-400">Build: {__BUILD_TIMESTAMP__}</p>
     </div>
   );
 }
