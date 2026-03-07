@@ -1,1 +1,0 @@
-if('serviceWorker' in navigator) {window.addEventListener('load', () => {navigator.serviceWorker.register('/mangatrans/branches/claude-add-e2e-test-logging-aVTvk/sw.js', { scope: '/mangatrans/branches/claude-add-e2e-test-logging-aVTvk/' })})}
