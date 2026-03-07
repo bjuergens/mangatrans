@@ -1,0 +1,1 @@
+if('serviceWorker' in navigator) {window.addEventListener('load', () => {navigator.serviceWorker.register('/mangatrans/branches/claude-github-pages-per-branch-s9iac/sw.js', { scope: '/mangatrans/branches/claude-github-pages-per-branch-s9iac/' })})}
