@@ -4,6 +4,17 @@ import { db } from "./db";
 type TextExtractionBackend = "ai-vision" | "local-ocr";
 type AnalysisDetailLevel = "basic" | "detailed";
 
+function timeAgo(iso: string): string {
+  const seconds = Math.floor((Date.now() - new Date(iso).getTime()) / 1000);
+  if (seconds < 60) return "just now";
+  const minutes = Math.floor(seconds / 60);
+  if (minutes < 60) return `${minutes}m ago`;
+  const hours = Math.floor(minutes / 60);
+  if (hours < 24) return `${hours}h ago`;
+  const days = Math.floor(hours / 24);
+  return `${days}d ago`;
+}
+
 export default function SettingsPage() {
   const [apiKey, setApiKey] = useState("");
   const [savedApiKey, setSavedApiKey] = useState("");
@@ -232,7 +243,7 @@ export default function SettingsPage() {
             className="text-gray-400 hover:text-gray-600 hover:underline"
             data-testid="build-log-link"
           >
-            {__BUILD_TIMESTAMP__}
+            {__BUILD_TIMESTAMP__} ({timeAgo(__BUILD_TIMESTAMP__)})
           </a>
         </p>
         <a
