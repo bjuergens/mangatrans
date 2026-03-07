@@ -6,9 +6,19 @@ test("app loads with title", async ({ page }) => {
   await expect(page).toHaveTitle("MangaTrans");
 });
 
-test("library page shows import prompt", async ({ page }) => {
+test("library page shows example manga after seeding", async ({ page }) => {
   await page.goto("/");
-  await expect(page.getByText("Your manga library")).toBeVisible();
+  // Wait for the comic grid to appear (seeding fetches images)
+  await expect(page.getByTestId("comic-grid")).toBeVisible({ timeout: 10000 });
+  await expect(page.getByText("Wikipe-tan")).toBeVisible();
+});
+
+test("library page shows upload area", async ({ page }) => {
+  await page.goto("/");
+  await expect(
+    page.getByText("Drop a CBZ file here or click to browse"),
+  ).toBeVisible({ timeout: 10000 });
+  await expect(page.getByTestId("upload-button")).toBeVisible();
 });
 
 test("can navigate to settings", async ({ page }) => {
@@ -20,7 +30,8 @@ test("can navigate to settings", async ({ page }) => {
 test("can navigate back to library from settings", async ({ page }) => {
   await page.goto("/settings");
   await page.getByRole("link", { name: "Library" }).click();
-  await expect(page.getByText("Your manga library")).toBeVisible();
+  // Wait for the grid to appear (seeding happens on library load)
+  await expect(page.getByTestId("comic-grid")).toBeVisible({ timeout: 10000 });
 });
 
 test("can navigate to settings via gear icon on library page", async ({
@@ -29,6 +40,45 @@ test("can navigate to settings via gear icon on library page", async ({
   await page.goto("/");
   await page.getByTestId("settings-link").click();
   await expect(page.getByText("Anthropic API Key")).toBeVisible();
+});
+
+test("clicking a comic opens the reader", async ({ page }) => {
+  await page.goto("/");
+  await expect(page.getByTestId("comic-grid")).toBeVisible({ timeout: 10000 });
+
+  // Click on the Wikipe-tan comic card
+  await page.getByText("Wikipe-tan").click();
+
+  // Should navigate to reader and show the page image
+  await expect(page.getByTestId("reader-title")).toHaveText("Wikipe-tan");
+  await expect(page.getByTestId("page-indicator")).toHaveText("1 / 4");
+  await expect(page.getByTestId("page-image")).toBeVisible({ timeout: 10000 });
+});
+
+test("reader page navigation works", async ({ page }) => {
+  await page.goto("/");
+  await expect(page.getByTestId("comic-grid")).toBeVisible({ timeout: 10000 });
+  await page.getByText("Wikipe-tan").click();
+
+  await expect(page.getByTestId("page-indicator")).toHaveText("1 / 4");
+
+  // Previous should be disabled on page 1
+  await expect(page.getByTestId("prev-page")).toBeDisabled();
+
+  // Go to page 2
+  await page.getByTestId("next-page").click();
+  await expect(page.getByTestId("page-indicator")).toHaveText("2 / 4");
+  await expect(page.getByTestId("prev-page")).toBeEnabled();
+});
+
+test("reader back to library link works", async ({ page }) => {
+  await page.goto("/");
+  await expect(page.getByTestId("comic-grid")).toBeVisible({ timeout: 10000 });
+  await page.getByText("Wikipe-tan").click();
+
+  await expect(page.getByTestId("reader-title")).toBeVisible();
+  await page.getByTestId("back-to-library").click();
+  await expect(page.getByTestId("comic-grid")).toBeVisible({ timeout: 10000 });
 });
 
 test("can save and persist API key", async ({ page }) => {
