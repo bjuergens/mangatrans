@@ -13,6 +13,7 @@ export default function SettingsPage() {
     useState<AnalysisDetailLevel>("detailed");
   const [saving, setSaving] = useState(false);
   const [loaded, setLoaded] = useState(false);
+  const [resetting, setResetting] = useState(false);
 
   useEffect(() => {
     async function load() {
@@ -58,6 +59,22 @@ export default function SettingsPage() {
   async function saveAnalysisDetail(value: AnalysisDetailLevel) {
     setAnalysisDetail(value);
     await db.settings.put({ key: "analysisDetailLevel", value });
+  }
+
+  async function resetApp() {
+    if (
+      !window.confirm(
+        "This will delete all your data (comics, settings, API key) and reload the app. Are you sure?",
+      )
+    )
+      return;
+    setResetting(true);
+    await db.delete();
+    const registrations = await navigator.serviceWorker.getRegistrations();
+    await Promise.all(registrations.map((r) => r.unregister()));
+    const cacheNames = await caches.keys();
+    await Promise.all(cacheNames.map((name) => caches.delete(name)));
+    window.location.replace(import.meta.env.BASE_URL || "/");
   }
 
   const apiKeyDirty = apiKey.trim() !== savedApiKey;
@@ -187,8 +204,35 @@ export default function SettingsPage() {
         </div>
       </section>
 
+      {/* Reset */}
+      <section className="mb-8">
+        <h2 className="mb-2 text-lg font-semibold">Reset</h2>
+        <p className="mb-3 text-sm text-gray-500">
+          Delete all data and start fresh. This removes all comics, analyses,
+          settings, and cached data.
+        </p>
+        <button
+          onClick={resetApp}
+          disabled={resetting}
+          className="rounded bg-red-600 px-4 py-2 text-white hover:bg-red-700 disabled:opacity-50"
+          data-testid="reset-app"
+        >
+          {resetting ? "Resetting..." : "Reset Everything"}
+        </button>
+      </section>
+
       {/* Build Info */}
-      <p className="mt-8 text-xs text-gray-400">Build: {__BUILD_TIMESTAMP__}</p>
+      <section className="mt-8 border-t border-gray-200 pt-4 text-xs text-gray-400">
+        <p>Build: {__BUILD_TIMESTAMP__}</p>
+        <a
+          href="https://github.com/bjuergens/mangatrans"
+          target="_blank"
+          rel="noopener noreferrer"
+          className="text-gray-400 hover:text-gray-600 hover:underline"
+        >
+          github.com/bjuergens/mangatrans
+        </a>
+      </section>
     </div>
   );
 }

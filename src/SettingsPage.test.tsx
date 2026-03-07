@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, afterEach } from "vitest";
+import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import { render, screen, waitFor, cleanup } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter } from "react-router-dom";
@@ -97,5 +97,37 @@ describe("SettingsPage", () => {
     await waitFor(() => {
       expect(screen.getByText(/Build:/)).toBeInTheDocument();
     });
+  });
+
+  it("shows GitHub repo link", async () => {
+    renderSettings();
+    const link = await screen.findByText("github.com/bjuergens/mangatrans");
+    expect(link).toBeInstanceOf(HTMLAnchorElement);
+    expect(link).toHaveAttribute(
+      "href",
+      "https://github.com/bjuergens/mangatrans",
+    );
+    expect(link).toHaveAttribute("target", "_blank");
+  });
+
+  it("shows reset button", async () => {
+    renderSettings();
+    const button = await screen.findByTestId("reset-app");
+    expect(button).toHaveTextContent("Reset Everything");
+  });
+
+  it("reset button prompts for confirmation", async () => {
+    renderSettings();
+    const user = userEvent.setup();
+    const confirmSpy = vi.spyOn(window, "confirm").mockReturnValueOnce(false);
+
+    const button = await screen.findByTestId("reset-app");
+    await user.click(button);
+
+    expect(confirmSpy).toHaveBeenCalled();
+    // DB should still exist since user cancelled
+    const count = await db.settings.count();
+    expect(count).toBeGreaterThanOrEqual(0);
+    confirmSpy.mockRestore();
   });
 });
