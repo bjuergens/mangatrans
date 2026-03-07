@@ -33,7 +33,8 @@ jobs:
           node-version: 22
           cache: npm
 
-      - run: npm ci --no-audit --no-fund
+      - name: Setup
+        run: npm run setup
 
       - name: Build
         run: npm run build
