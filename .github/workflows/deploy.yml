@@ -27,6 +27,9 @@ jobs:
 
       - name: Run all checks
         run: npm run check:all
+
+      - name: Build for deployment
+        run: npm run build
         env:
           BASE_URL: /${{ github.event.repository.name }}/
 
