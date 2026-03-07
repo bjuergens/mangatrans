@@ -1,5 +1,6 @@
 import { useState, useEffect } from "react";
 import { db } from "./db";
+import { testApiKey, type ModelInfo } from "./claude-api";
 
 type TextExtractionBackend = "ai-vision" | "local-ocr";
 type AnalysisDetailLevel = "basic" | "detailed";
@@ -25,6 +26,12 @@ export default function SettingsPage() {
   const [saving, setSaving] = useState(false);
   const [loaded, setLoaded] = useState(false);
   const [resetting, setResetting] = useState(false);
+  const [testing, setTesting] = useState(false);
+  const [testResult, setTestResult] = useState<{
+    valid: boolean;
+    models: ModelInfo[];
+    error?: string;
+  } | null>(null);
 
   useEffect(() => {
     async function load() {
@@ -60,6 +67,15 @@ export default function SettingsPage() {
     await db.settings.delete("apiKey");
     setApiKey("");
     setSavedApiKey("");
+    setTestResult(null);
+  }
+
+  async function handleTestApiKey() {
+    setTesting(true);
+    setTestResult(null);
+    const result = await testApiKey(savedApiKey);
+    setTestResult(result);
+    setTesting(false);
   }
 
   async function saveTextExtraction(value: TextExtractionBackend) {
@@ -122,15 +138,56 @@ export default function SettingsPage() {
           </button>
         </div>
         {savedApiKey && (
-          <div className="mt-2 flex items-center gap-2">
-            <span className="text-sm text-green-600">API key saved</span>
-            <button
-              onClick={clearApiKey}
-              className="text-sm text-red-500 hover:underline"
-              data-testid="clear-api-key"
-            >
-              Clear
-            </button>
+          <div className="mt-2 space-y-2">
+            <div className="flex items-center gap-2">
+              <span className="text-sm text-green-600">API key saved</span>
+              <button
+                onClick={clearApiKey}
+                className="text-sm text-red-500 hover:underline"
+                data-testid="clear-api-key"
+              >
+                Clear
+              </button>
+              <button
+                onClick={handleTestApiKey}
+                disabled={testing}
+                className="rounded border border-gray-300 px-3 py-1 text-sm hover:bg-gray-50 disabled:opacity-50"
+                data-testid="test-api-key"
+              >
+                {testing ? "Testing..." : "Test Key"}
+              </button>
+            </div>
+            {testResult && (
+              <div
+                className={`rounded border p-3 text-sm ${testResult.valid ? "border-green-200 bg-green-50" : "border-red-200 bg-red-50"}`}
+                data-testid="api-key-test-result"
+              >
+                {testResult.valid ? (
+                  <>
+                    <p className="font-medium text-green-700">
+                      API key is valid
+                    </p>
+                    <p className="mt-1 text-green-600">
+                      {testResult.models.length} models available
+                    </p>
+                    <ul className="mt-1 max-h-32 space-y-0.5 overflow-y-auto text-xs text-green-600">
+                      {testResult.models.map((m) => (
+                        <li key={m.id}>{m.display_name || m.id}</li>
+                      ))}
+                    </ul>
+                  </>
+                ) : (
+                  <>
+                    <p className="font-medium text-red-700">
+                      API key test failed
+                    </p>
+                    <p className="mt-1 text-xs text-red-500">
+                      {testResult.error}
+                    </p>
+                  </>
+                )}
+              </div>
+            )}
           </div>
         )}
       </section>
