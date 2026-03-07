@@ -4,22 +4,162 @@ on:
   pull_request:
     branches: [main, master]
 
+permissions:
+  contents: write
+  pull-requests: write
+
+concurrency:
+  group: ci-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
 jobs:
   check:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
 
+      - name: Sanitize branch name
+        id: branch
+        run: |
+          BRANCH="${{ github.head_ref }}"
+          SAFE="${BRANCH//\//-}"
+          SAFE="${SAFE//[^a-zA-Z0-9-]/-}"
+          echo "name=$SAFE" >> "$GITHUB_OUTPUT"
+
       - uses: actions/setup-node@v4
         with:
           node-version: 22
           cache: npm
 
-      - name: Setup
-        run: npm run setup
+      - run: mkdir -p ci-logs
 
-      - name: Run all checks
-        run: npm run check:all
+      - name: Setup
+        run: npm run setup 2>&1 | tee ci-logs/setup.log
+        shell: bash
+
+      - name: Typecheck
+        id: typecheck
+        run: npm run check:typecheck 2>&1 | tee ci-logs/typecheck.log
+        shell: bash
+
+      - name: Lint
+        id: lint
+        if: always() && steps.typecheck.outcome != 'skipped'
+        run: npm run check:lint 2>&1 | tee ci-logs/lint.log
+        shell: bash
+
+      - name: Format
+        id: format
+        if: always() && steps.lint.outcome != 'skipped'
+        run: npm run check:format 2>&1 | tee ci-logs/format.log
+        shell: bash
+
+      - name: Unit tests
+        id: test
+        if: always() && steps.format.outcome != 'skipped'
+        run: npm run check:test 2>&1 | tee ci-logs/test.log
+        shell: bash
+
+      - name: Build
+        id: build
+        if: always() && steps.test.outcome != 'skipped'
+        run: npm run check:build 2>&1 | tee ci-logs/build.log
+        shell: bash
+
+      - name: E2E tests
+        id: e2e
+        if: always() && steps.build.outcome != 'skipped'
+        run: npm run check:test:e2e 2>&1 | tee ci-logs/e2e.log
+        shell: bash
+
+      - name: Generate log index
+        if: always()
+        run: |
+          TIMESTAMP=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
+          COMMIT=$(git rev-parse --short HEAD)
+          BRANCH="${{ github.head_ref }}"
+
+          # Build sections from log files
+          sections=""
+          for step in setup typecheck lint format test build e2e; do
+            file="ci-logs/$step.log"
+            if [ -f "$file" ]; then
+              content=$(sed 's/&/\&amp;/g; s/</\&lt;/g; s/>/\&gt;/g; s/"/\&quot;/g' "$file")
+              sections="$sections
+              <details open>
+                <summary>$step</summary>
+                <pre>$content</pre>
+              </details>"
+            fi
+          done
+
+          cat > ci-logs/index.html <<HTMLEOF
+          <!DOCTYPE html>
+          <html lang="en">
+          <head>
+            <meta charset="UTF-8">
+            <meta name="viewport" content="width=device-width, initial-scale=1.0">
+            <title>CI Logs — $BRANCH</title>
+            <style>
+              body { font-family: system-ui, sans-serif; max-width: 900px; margin: 0 auto; padding: 2rem; background: #0d1117; color: #c9d1d9; }
+              h1 { color: #58a6ff; }
+              .meta { color: #8b949e; font-size: 0.875rem; margin-bottom: 2rem; }
+              .meta code { background: #161b22; padding: 0.15em 0.4em; border-radius: 4px; }
+              details { margin-bottom: 1rem; border: 1px solid #30363d; border-radius: 6px; overflow: hidden; }
+              summary { cursor: pointer; padding: 0.75rem 1rem; background: #161b22; font-weight: 600; font-size: 1rem; }
+              summary:hover { background: #1c2128; }
+              pre { margin: 0; padding: 1rem; overflow-x: auto; font-size: 0.8125rem; line-height: 1.5; background: #0d1117; white-space: pre-wrap; word-break: break-word; }
+              a { color: #58a6ff; }
+            </style>
+          </head>
+          <body>
+            <h1>CI Logs</h1>
+            <div class="meta">
+              <p>Commit: <code>$COMMIT</code> on <code>$BRANCH</code></p>
+              <p>Run: <code>$TIMESTAMP</code></p>
+            </div>
+            $sections
+          </body>
+          </html>
+          HTMLEOF
+        shell: bash
+
+      - name: Deploy CI logs to GitHub Pages
+        if: always()
+        uses: JamesIves/github-pages-deploy-action@v4
+        with:
+          folder: ci-logs
+          target-folder: branches/${{ steps.branch.outputs.name }}/ci-logs
+          clean: true
+
+      - name: Comment CI logs link on PR
+        if: always()
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const owner = context.repo.owner;
+            const repo = context.repo.repo;
+            const branch = '${{ steps.branch.outputs.name }}';
+            const logsUrl = `https://${owner}.github.io/${repo}/branches/${branch}/ci-logs/`;
+            const passed = '${{ job.status }}' === 'success';
+            const icon = passed ? '✅' : '❌';
+            const status = passed ? 'passed' : 'failed';
+            const body = `${icon} **CI ${status}** — [View logs](${logsUrl})`;
+            const { data: comments } = await github.rest.issues.listComments({
+              owner, repo, issue_number: context.issue.number,
+            });
+            const existing = comments.find(c =>
+              c.user.login === 'github-actions[bot]' && c.body.includes('CI ')  && c.body.includes('View logs')
+            );
+            if (existing) {
+              await github.rest.issues.updateComment({
+                owner, repo, comment_id: existing.id, body,
+              });
+            } else {
+              await github.rest.issues.createComment({
+                owner, repo, issue_number: context.issue.number, body,
+              });
+            }
 
       - name: Upload test results
         if: always()
@@ -29,4 +169,18 @@ jobs:
           path: |
             test-results/
             playwright-report/
+            ci-logs/
           retention-days: 7
+
+      - name: Fail if any check failed
+        if: always()
+        run: |
+          if [ "${{ steps.typecheck.outcome }}" = "failure" ] || \
+             [ "${{ steps.lint.outcome }}" = "failure" ] || \
+             [ "${{ steps.format.outcome }}" = "failure" ] || \
+             [ "${{ steps.test.outcome }}" = "failure" ] || \
+             [ "${{ steps.build.outcome }}" = "failure" ] || \
+             [ "${{ steps.e2e.outcome }}" = "failure" ]; then
+            echo "❌ One or more checks failed"
+            exit 1
+          fi

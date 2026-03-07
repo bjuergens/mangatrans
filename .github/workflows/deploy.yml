@@ -22,38 +22,36 @@ jobs:
           node-version: 22
           cache: npm
 
-      - run: npm ci --no-audit --no-fund
-
       - run: mkdir -p build-logs
 
-      - name: Install Playwright
-        run: npx playwright install --with-deps chromium > build-logs/playwright-install.log 2>&1
+      - name: Setup
+        run: npm run setup 2>&1 | tee build-logs/setup.log
         shell: bash
 
       - name: Typecheck
-        run: npm run typecheck 2>&1 | tee build-logs/typecheck.log
+        run: npm run check:typecheck 2>&1 | tee build-logs/typecheck.log
         shell: bash
 
       - name: Lint
-        run: npm run lint 2>&1 | tee build-logs/lint.log
+        run: npm run check:lint 2>&1 | tee build-logs/lint.log
         shell: bash
 
       - name: Format check
-        run: npm run format:check 2>&1 | tee build-logs/format.log
+        run: npm run check:format 2>&1 | tee build-logs/format.log
         shell: bash
 
       - name: Unit tests
-        run: npm run test:run 2>&1 | tee build-logs/test.log
+        run: npm run check:test 2>&1 | tee build-logs/test.log
         shell: bash
 
       - name: Build
-        run: npm run build 2>&1 | tee build-logs/build.log
+        run: npm run check:build 2>&1 | tee build-logs/build.log
         shell: bash
         env:
           BASE_URL: /${{ github.event.repository.name }}/
 
       - name: E2E tests
-        run: npm run test:e2e 2>&1 | tee build-logs/e2e.log
+        run: npm run check:test:e2e 2>&1 | tee build-logs/e2e.log
         shell: bash
 
       - name: Generate build report
