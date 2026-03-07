@@ -1,18 +1,41 @@
-// LibraryPage — the main entry screen showing imported manga.
-// Will contain: CBZ file import (via JSZip), list of imported comics,
-// ability to trigger AI analysis, and navigation to the reader view.
+import { Link } from "react-router-dom";
 
 export default function LibraryPage() {
   return (
     <div className="p-4">
-      <h1 className="mb-4 text-2xl font-bold">Library</h1>
+      <div className="mb-4 flex items-center justify-between">
+        <h1 className="text-2xl font-bold">Library</h1>
+        <Link
+          to="/settings"
+          className="rounded-lg p-2 text-gray-500 hover:bg-gray-100 hover:text-gray-700"
+          aria-label="Settings"
+          data-testid="settings-link"
+        >
+          <svg
+            xmlns="http://www.w3.org/2000/svg"
+            width="24"
+            height="24"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="2"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          >
+            <path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z" />
+            <circle cx="12" cy="12" r="3" />
+          </svg>
+        </Link>
+      </div>
       <p className="mb-4 text-gray-600">
         Your manga library. Import a CBZ file to get started.
       </p>
 
       {/* CBZ import: will use JSZip to extract pages, store in IndexedDB via db.ts */}
       <div className="rounded-lg border-2 border-dashed border-gray-300 p-8 text-center">
-        <p className="text-gray-400">Drop a CBZ file here or click to browse</p>
+        <p className="text-gray-400">
+          Drop a CBZ file here or click to browse
+        </p>
       </div>
     </div>
   );
