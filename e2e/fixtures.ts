@@ -6,7 +6,9 @@ export const test = base.extend<{ captureConsole: void }>({
     async ({ page }, use, testInfo) => {
       const messages: string[] = [];
       page.on("console", (msg) => {
-        messages.push(`[${msg.type()}] ${msg.text()}`);
+        const line = `[${msg.type()}] ${msg.text()}`;
+        messages.push(line);
+        console.log(`  🌐 ${line}`);
       });
 
       const start = Date.now();
