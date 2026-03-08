@@ -1,4 +1,5 @@
 import Dexie, { type EntityTable } from "dexie";
+import { assetUrl } from "./router";
 
 export interface Comic {
   id: number;
@@ -105,9 +106,9 @@ export async function seedExampleManga(): Promise<void> {
   const count = await db.comics.count();
   if (count > 0) return;
 
-  const baseUrl = `${import.meta.env.BASE_URL}example/wikipe/`;
+  const exampleDir = assetUrl("example/wikipe/");
   const pageBlobs = await Promise.all(
-    EXAMPLE_MANGA_PAGES.map((name) => fetchImageAsBlob(`${baseUrl}${name}`)),
+    EXAMPLE_MANGA_PAGES.map((name) => fetchImageAsBlob(`${exampleDir}${name}`)),
   );
 
   const comicId = await db.comics.add({

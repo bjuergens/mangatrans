@@ -16,18 +16,23 @@
       ) {
         // This is a request for a static file (not .html), let the 404 stand.
       } else {
-        var pathSegmentsToKeep = window.location.pathname
-          .split("/")
-          .filter(Boolean);
-        var repo = pathSegmentsToKeep[0]; // e.g. "mangatrans"
-        var rest = "/" + pathSegmentsToKeep.slice(1).join("/");
+        var segments = window.location.pathname.split("/").filter(Boolean);
+        var repo = segments[0]; // e.g. "mangatrans"
+
+        // Detect preview branch deployments: /repo/branches/<name>/...
+        // The base path includes everything up to and including the branch name.
+        var basePath;
+        var rest;
+        if (segments[1] === "branches" && segments.length >= 3) {
+          basePath = "/" + repo + "/branches/" + segments[2] + "/";
+          rest = "/" + segments.slice(3).join("/");
+        } else {
+          basePath = "/" + repo + "/";
+          rest = "/" + segments.slice(1).join("/");
+        }
+
         window.location.replace(
-          window.location.origin +
-            "/" +
-            repo +
-            "/?" +
-            rest +
-            window.location.hash,
+          window.location.origin + basePath + "?" + rest + window.location.hash,
         );
       }
     </script>
