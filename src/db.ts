@@ -17,20 +17,28 @@ export interface Page {
   imageBlob: Blob;
   /** Visual context description from AI page scan */
   visualContext?: string;
-  /** Whether this page has been scanned for text regions */
+  /** Whether text regions have been detected (boxes only, no OCR yet) */
+  detected?: boolean;
+  /** Whether this page has been scanned for text regions (OCR complete) */
   scanned?: boolean;
 }
 
 export type RegionType = "dialogue" | "narration" | "sfx";
 
+export type TextDirection = "rtl" | "ltr" | "ttb";
+
 export interface TextRegion {
   id: number;
   pageId: number;
   type: RegionType;
-  /** Extracted Japanese text */
+  /** Extracted Japanese text (empty after detection, filled after OCR) */
   text: string;
-  /** Bounding box: [x, y, width, height] as fractions of page dimensions (0-1) */
+  /** Bounding box: [x, y, size, size] as fractions of page dimensions (0-1). Boxes are square. */
   bbox: [number, number, number, number];
+  /** Text reading direction */
+  textDirection?: TextDirection;
+  /** Whether this region contains furigana */
+  hasFurigana?: boolean;
 }
 
 export interface VocabEntry {
@@ -80,6 +88,15 @@ db.version(1).stores({
 
 // v2: adds coverImage to comics, compound index on pages for [comicId+pageNumber] queries
 db.version(2).stores({
+  comics: "++id, title, importedAt",
+  pages: "++id, comicId, [comicId+pageNumber]",
+  textRegions: "++id, pageId, type",
+  analyses: "++id, textRegionId",
+  settings: "key",
+});
+
+// v3: TextRegion gains textDirection, hasFurigana; Page gains detected flag
+db.version(3).stores({
   comics: "++id, title, importedAt",
   pages: "++id, comicId, [comicId+pageNumber]",
   textRegions: "++id, pageId, type",

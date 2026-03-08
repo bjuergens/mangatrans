@@ -1,5 +1,11 @@
 import { Logger } from "./logger";
-import { db, type RegionType, type VocabEntry, type GrammarPoint } from "./db";
+import {
+  db,
+  type RegionType,
+  type TextDirection,
+  type VocabEntry,
+  type GrammarPoint,
+} from "./db";
 
 const API_BASE = "https://api.anthropic.com/v1";
 const API_VERSION = "2023-06-01";
@@ -44,6 +50,24 @@ export interface ExtractedRegion {
   bbox: [number, number, number, number];
 }
 
+export interface DetectedRegion {
+  type: RegionType;
+  bbox: [number, number, number, number];
+  textDirection: TextDirection;
+  hasFurigana: boolean;
+}
+
+export interface DetectRegionsResult {
+  regions: DetectedRegion[];
+  visualContext: string;
+  rawResponse: string;
+}
+
+export interface OcrRegionResult {
+  text: string;
+  rawResponse: string;
+}
+
 export interface PageScanResult {
   regions: ExtractedRegion[];
   visualContext: string;
@@ -79,6 +103,27 @@ function mediaType(
   if (t === "image/gif") return "image/gif";
   if (t === "image/webp") return "image/webp";
   return "image/jpeg";
+}
+
+/**
+ * Crop a region from an image blob using Canvas.
+ * bbox is [x, y, width, height] as fractions of image dimensions (0-1).
+ */
+export async function cropImage(
+  imageBlob: Blob,
+  bbox: [number, number, number, number],
+): Promise<Blob> {
+  const img = await createImageBitmap(imageBlob);
+  const [fx, fy, fw, fh] = bbox;
+  const sx = Math.round(fx * img.width);
+  const sy = Math.round(fy * img.height);
+  const sw = Math.round(fw * img.width);
+  const sh = Math.round(fh * img.height);
+
+  const canvas = new OffscreenCanvas(sw, sh);
+  const ctx = canvas.getContext("2d")!;
+  ctx.drawImage(img, sx, sy, sw, sh, 0, 0, sw, sh);
+  return canvas.convertToBlob({ type: "image/png" });
 }
 
 export class AnthropicClient {
@@ -242,6 +287,163 @@ Important:
       visualContext: parsed.visualContext,
       rawResponse,
     };
+  }
+
+  /** Stage 1: Detect text region bounding boxes (no OCR). */
+  async detectRegions(imageBlob: Blob): Promise<DetectRegionsResult> {
+    const base64 = await blobToBase64(imageBlob);
+    const mimeType = mediaType(imageBlob);
+
+    const body = {
+      model: VISION_MODEL,
+      max_tokens: 4096,
+      messages: [
+        {
+          role: "user",
+          content: [
+            {
+              type: "image",
+              source: { type: "base64", media_type: mimeType, data: base64 },
+            },
+            {
+              type: "text",
+              text: `You are analyzing a manga page to detect text regions. Do NOT read or transcribe the text — only locate where text appears.
+
+1. **Detect all text regions** (speech bubbles, narration boxes, sound effects) and return their bounding boxes.
+2. **Provide visual page context** — a brief description of what's happening on this page.
+
+Respond ONLY with valid JSON in this exact format:
+{
+  "regions": [
+    {
+      "type": "dialogue" | "narration" | "sfx",
+      "bbox": [x, y, size, size],
+      "textDirection": "rtl" | "ltr" | "ttb",
+      "hasFurigana": true | false
+    }
+  ],
+  "visualContext": "Brief description of the page's visual content and context"
+}
+
+For bbox coordinates, use FRACTIONS of the page dimensions (0 to 1):
+- x: left edge as fraction of page width
+- y: top edge as fraction of page height
+- size: the box is square — use the same value for width and height, sized to enclose the text region
+
+For textDirection:
+- "ttb": vertical Japanese text (top-to-bottom, right-to-left columns) — most common in manga
+- "rtl": horizontal right-to-left text
+- "ltr": horizontal left-to-right text (e.g. English loanwords, numbers)
+
+Important:
+- Detect ALL visible text regions, including small text and sound effects
+- Classify each region: "dialogue" for speech bubbles, "narration" for narration boxes/captions, "sfx" for sound effects
+- Order regions roughly by reading order (right-to-left, top-to-bottom for manga)
+- Make bounding boxes square and tightly enclose the text
+- Set hasFurigana to true if you see small reading aids (furigana/ruby text) next to kanji`,
+            },
+          ],
+        },
+      ],
+    };
+
+    const { body: responseBody } = await this.request(
+      "POST",
+      "/messages",
+      body,
+    );
+
+    const json = responseBody as {
+      content: Array<{ type: string; text?: string }>;
+    };
+    const textBlock = json.content.find((b) => b.type === "text");
+    if (!textBlock?.text) {
+      throw new Error("Claude returned no text content in detection response");
+    }
+
+    const rawResponse = textBlock.text;
+    let parsed: { regions: DetectedRegion[]; visualContext: string };
+    try {
+      parsed = JSON.parse(stripCodeFences(rawResponse));
+    } catch (e) {
+      throw new Error(
+        `Failed to parse detection response as JSON: ${e instanceof Error ? e.message : e}\n\nRaw response (first 500 chars):\n${rawResponse.slice(0, 500)}`,
+      );
+    }
+
+    this.log.info(
+      `🔍 Region detection complete: ${parsed.regions.length} regions found`,
+    );
+    return {
+      regions: parsed.regions,
+      visualContext: parsed.visualContext,
+      rawResponse,
+    };
+  }
+
+  /** Stage 2: OCR a single cropped text region. */
+  async ocrRegion(croppedBlob: Blob): Promise<OcrRegionResult> {
+    const base64 = await blobToBase64(croppedBlob);
+    const mimeType = mediaType(croppedBlob);
+
+    const body = {
+      model: VISION_MODEL,
+      max_tokens: 1024,
+      messages: [
+        {
+          role: "user",
+          content: [
+            {
+              type: "image",
+              source: { type: "base64", media_type: mimeType, data: base64 },
+            },
+            {
+              type: "text",
+              text: `This is a cropped region from a manga page containing Japanese text. Read and transcribe the text exactly as written.
+
+Respond ONLY with valid JSON:
+{
+  "text": "the Japanese text exactly as written"
+}
+
+Important:
+- Preserve the original text exactly (including kanji, hiragana, katakana)
+- Include all text visible in this crop
+- If there are furigana (small reading aids), include only the main text, not the furigana`,
+            },
+          ],
+        },
+      ],
+    };
+
+    const { body: responseBody } = await this.request(
+      "POST",
+      "/messages",
+      body,
+    );
+
+    const json = responseBody as {
+      content: Array<{ type: string; text?: string }>;
+    };
+    const textBlock = json.content.find((b) => b.type === "text");
+    if (!textBlock?.text) {
+      throw new Error("Claude returned no text content in OCR response");
+    }
+
+    const rawResponse = textBlock.text;
+    let parsed: { text: string };
+    try {
+      parsed = JSON.parse(stripCodeFences(rawResponse));
+    } catch (e) {
+      throw new Error(
+        `Failed to parse OCR response as JSON: ${e instanceof Error ? e.message : e}\n\nRaw response (first 500 chars):\n${rawResponse.slice(0, 500)}`,
+      );
+    }
+
+    this.log.info(
+      `🔍 OCR complete: "${parsed.text.slice(0, 30)}${parsed.text.length > 30 ? "..." : ""}"`,
+    );
+    return { text: parsed.text, rawResponse };
   }
 
   /** Analyze a text region for vocabulary, grammar, and translation. */
