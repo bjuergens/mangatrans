@@ -20,7 +20,7 @@ function apiHeaders(apiKey: string): Record<string, string> {
 /** Strip markdown code fences (```json ... ```) that Claude sometimes wraps around JSON. */
 function stripCodeFences(text: string): string {
   const trimmed = text.trim();
-  const match = trimmed.match(/^```(?:\w*)\n([\s\S]*?)\n```$/);
+  const match = trimmed.match(/^```\w*\n([\s\S]*)\n```$/);
   return match ? match[1]! : trimmed;
 }
 
