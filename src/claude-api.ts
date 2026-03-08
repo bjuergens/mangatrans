@@ -12,6 +12,7 @@ function apiHeaders(apiKey: string): Record<string, string> {
   return {
     "x-api-key": apiKey,
     "anthropic-version": API_VERSION,
+    "anthropic-dangerous-direct-browser-access": "true",
     "content-type": "application/json",
   };
 }
@@ -37,6 +38,7 @@ export async function testApiKey(apiKey: string): Promise<ApiKeyTestResult> {
     headers: {
       "x-api-key": apiKey,
       "anthropic-version": API_VERSION,
+      "anthropic-dangerous-direct-browser-access": "true",
     },
   });
 
