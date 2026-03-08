@@ -12,10 +12,14 @@
         var query = window.location.search;
         if (query.length > 1) {
           var path = query.slice(1); // strip leading "?"
+          var restored = (window.location.pathname + path).replace(
+            /\/\//g,
+            "/",
+          );
           window.history.replaceState(
             null,
             "",
-            window.location.pathname + path + window.location.hash,
+            restored + window.location.hash,
           );
         }
       })();
