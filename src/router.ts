@@ -11,9 +11,11 @@ export function assetUrl(path: string): string {
   return `${baseUrl}${path}`;
 }
 
-/** Build the full app root URL for hard redirects (e.g. after reset). */
-export function appRootUrl(): string {
-  return baseUrl || "/";
+/** Hard-redirect the browser to the app root (full page reload). */
+export function redirectToAppRoot(): void {
+  const url = baseUrl || "/";
+  log.info(`hard redirect → ${url}`);
+  window.location.replace(url);
 }
 
 /**

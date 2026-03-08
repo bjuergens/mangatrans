@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
 import { db } from "./db";
 import { testApiKey, type ModelInfo } from "./claude-api";
-import { appRootUrl, assetUrl } from "./router";
+import { redirectToAppRoot, assetUrl } from "./router";
 
 type TextExtractionBackend = "ai-vision" | "local-ocr";
 type AnalysisDetailLevel = "basic" | "detailed";
@@ -102,7 +102,7 @@ export default function SettingsPage() {
     await Promise.all(registrations.map((r) => r.unregister()));
     const cacheNames = await caches.keys();
     await Promise.all(cacheNames.map((name) => caches.delete(name)));
-    window.location.replace(appRootUrl());
+    redirectToAppRoot();
   }
 
   const apiKeyDirty = apiKey.trim() !== savedApiKey;
