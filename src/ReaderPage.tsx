@@ -84,18 +84,16 @@ export default function ReaderPage() {
           .where("pageId")
           .equals(page.id)
           .toArray();
-        if (existingRegions.length > 0) {
-          const regionsWithAnalysis: RegionWithAnalysis[] = await Promise.all(
-            existingRegions.map(async (region) => {
-              const analysis = await db.analyses
-                .where("textRegionId")
-                .equals(region.id)
-                .first();
-              return { region, analysis };
-            }),
-          );
-          setRegions(regionsWithAnalysis);
-        }
+        const regionsWithAnalysis: RegionWithAnalysis[] = await Promise.all(
+          existingRegions.map(async (region) => {
+            const analysis = await db.analyses
+              .where("textRegionId")
+              .equals(region.id)
+              .first();
+            return { region, analysis };
+          }),
+        );
+        setRegions(regionsWithAnalysis);
       } catch (e) {
         log.error(`Failed to load page: ${e}`);
         setError("Failed to load page");
