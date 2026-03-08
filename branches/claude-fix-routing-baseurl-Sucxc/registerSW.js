@@ -1,1 +1,0 @@
-if('serviceWorker' in navigator) {window.addEventListener('load', () => {navigator.serviceWorker.register('/mangatrans/branches/claude-fix-routing-baseurl-Sucxc/sw.js', { scope: '/mangatrans/branches/claude-fix-routing-baseurl-Sucxc/' })})}
