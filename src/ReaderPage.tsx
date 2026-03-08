@@ -48,9 +48,16 @@ export default function ReaderPage() {
     y: number;
   } | null>(null);
   const imageContainerRef = useRef<HTMLDivElement>(null);
+  // Tracks which page is currently loaded. Set to null immediately on navigation
+  // (before the async load resolves) so in-flight scan/analysis callbacks can
+  // detect that the page has changed and skip state updates.
+  const currentPageIdRef = useRef<number | null>(null);
 
   useEffect(() => {
     let objectUrl: string | null = null;
+    // Invalidate immediately — any in-flight analysis for the previous page
+    // will see null !== their captured pageId and abort state updates.
+    currentPageIdRef.current = null;
 
     (async () => {
       try {
@@ -71,6 +78,7 @@ export default function ReaderPage() {
         }
 
         setPageId(page.id);
+        currentPageIdRef.current = page.id; // page is now current
         setScanned(!!page.scanned);
 
         objectUrl = URL.createObjectURL(page.imageBlob);
@@ -114,11 +122,12 @@ export default function ReaderPage() {
 
   const handleScan = useCallback(async () => {
     if (!pageId) return;
+    const myPageId = pageId; // capture — used to detect stale callbacks after navigation
     setScanning(true);
     setError(null);
 
     try {
-      const page = await db.pages.get(pageId);
+      const page = await db.pages.get(myPageId);
       if (!page) {
         setError("Page not found");
         setScanning(false);
@@ -130,18 +139,18 @@ export default function ReaderPage() {
       // Clear old regions and analyses for this page
       const oldRegions = await db.textRegions
         .where("pageId")
-        .equals(pageId)
+        .equals(myPageId)
         .toArray();
       const oldRegionIds = oldRegions.map((r) => r.id);
       if (oldRegionIds.length > 0) {
         await db.analyses.where("textRegionId").anyOf(oldRegionIds).delete();
-        await db.textRegions.where("pageId").equals(pageId).delete();
+        await db.textRegions.where("pageId").equals(myPageId).delete();
       }
 
       // Store new regions
       const regionIds = (await db.textRegions.bulkAdd(
         result.regions.map((r) => ({
-          pageId,
+          pageId: myPageId,
           type: r.type,
           text: r.text,
           bbox: r.bbox,
@@ -150,17 +159,22 @@ export default function ReaderPage() {
       )) as number[];
 
       // Update page with visual context and scanned flag
-      await db.pages.update(pageId, {
+      await db.pages.update(myPageId, {
         visualContext: result.visualContext,
         scanned: true,
       });
+
+      // Guard: user may have navigated away while the scan API call was in flight.
+      // DB writes above are still valid — don't update React state for the wrong page.
+      if (currentPageIdRef.current !== myPageId) return;
+
       setScanned(true);
 
       // Build region objects from the data we already have — no need to re-fetch
       const newRegions: RegionWithAnalysis[] = result.regions.map((r, i) => ({
         region: {
           id: regionIds[i]!,
-          pageId,
+          pageId: myPageId,
           type: r.type,
           text: r.text,
           bbox: r.bbox,
@@ -181,25 +195,23 @@ export default function ReaderPage() {
 
   const handleAnalyze = useCallback(async () => {
     if (!pageId || regions.length === 0) return;
+    const myPageId = pageId; // capture — used to detect stale callbacks after navigation
     setAnalyzing(true);
     setError(null);
 
     try {
-      const page = await db.pages.get(pageId);
+      const page = await db.pages.get(myPageId);
       if (!page?.visualContext) {
         setError("Page has not been scanned yet. Scan first.");
         setAnalyzing(false);
         return;
       }
 
-      const updatedRegions = [...regions];
-      for (let i = 0; i < updatedRegions.length; i++) {
-        const entry = updatedRegions[i]!;
+      for (let i = 0; i < regions.length; i++) {
+        const entry = regions[i]!;
         if (entry.analysis) continue; // Skip already analyzed
 
-        setAnalyzeProgress(
-          `Analyzing region ${i + 1}/${updatedRegions.length}...`,
-        );
+        setAnalyzeProgress(`Analyzing region ${i + 1}/${regions.length}...`);
 
         const result = await anthropic.analyzeTextRegion(
           entry.region.text,
@@ -207,25 +219,28 @@ export default function ReaderPage() {
           page.visualContext,
         );
 
-        const analysisId = (await db.analyses.add({
+        // Write to DB — valid regardless of whether user has navigated away
+        await db.analyses.add({
           textRegionId: entry.region.id,
           vocabulary: result.vocabulary,
           grammar: result.grammar,
           suggestedTranslation: result.suggestedTranslation,
           rawResponse: result.rawResponse,
-        })) as number;
+        });
 
-        // Build the Analysis object from data we already have — no need to re-fetch
-        const analysis: Analysis = {
-          id: analysisId,
-          textRegionId: entry.region.id,
-          vocabulary: result.vocabulary,
-          grammar: result.grammar,
-          suggestedTranslation: result.suggestedTranslation,
-          rawResponse: result.rawResponse,
-        };
-        updatedRegions[i] = { ...entry, analysis };
-        setRegions([...updatedRegions]);
+        // Guard: don't update state if user navigated to a different page
+        if (currentPageIdRef.current !== myPageId) return;
+
+        // Re-read from DB — DB is the single source of truth for region data
+        const analysis = await db.analyses
+          .where("textRegionId")
+          .equals(entry.region.id)
+          .first();
+        setRegions((prev) =>
+          prev.map((r) =>
+            r.region.id === entry.region.id ? { ...r, analysis } : r,
+          ),
+        );
       }
 
       setAnalyzeProgress("");
