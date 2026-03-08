@@ -2,6 +2,7 @@ import { useEffect, useState, useCallback, useRef } from "react";
 import { useParams, useNavigate, Link } from "react-router-dom";
 import { db, type TextRegion, type Analysis } from "./db";
 import { scanPage, analyzeTextRegion } from "./claude-api";
+import { createNavigate } from "./router";
 import { Logger } from "./logger";
 
 const log = new Logger("ReaderPage");
@@ -16,7 +17,7 @@ export default function ReaderPage() {
     comicId: string;
     pageNumber: string;
   }>();
-  const navigate = useNavigate();
+  const navigate = createNavigate(useNavigate());
 
   const comicIdNum = Number(comicId);
   const pageNum = Number(pageNumber);

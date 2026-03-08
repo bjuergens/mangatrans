@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react";
 import { db } from "./db";
 import { testApiKey, type ModelInfo } from "./claude-api";
+import { appRootUrl, assetUrl } from "./router";
 
 type TextExtractionBackend = "ai-vision" | "local-ocr";
 type AnalysisDetailLevel = "basic" | "detailed";
@@ -101,7 +102,7 @@ export default function SettingsPage() {
     await Promise.all(registrations.map((r) => r.unregister()));
     const cacheNames = await caches.keys();
     await Promise.all(cacheNames.map((name) => caches.delete(name)));
-    window.location.replace(import.meta.env.BASE_URL || "/");
+    window.location.replace(appRootUrl());
   }
 
   const apiKeyDirty = apiKey.trim() !== savedApiKey;
@@ -303,7 +304,7 @@ export default function SettingsPage() {
         <p>
           Build:{" "}
           <a
-            href={`${import.meta.env.BASE_URL}ci-logs.all.txt`}
+            href={assetUrl("ci-logs.all.txt")}
             target="_blank"
             rel="noopener noreferrer"
             className="text-gray-400 hover:text-gray-600 hover:underline"

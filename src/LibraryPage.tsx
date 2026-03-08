@@ -2,6 +2,7 @@ import { useEffect, useState, useRef } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import JSZip from "jszip";
 import { db, seedExampleManga, type Comic } from "./db";
+import { createNavigate } from "./router";
 import { Logger } from "./logger";
 
 const log = new Logger("LibraryPage");
@@ -13,7 +14,7 @@ export default function LibraryPage() {
   const [importing, setImporting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
-  const navigate = useNavigate();
+  const navigate = createNavigate(useNavigate());
 
   async function loadComics() {
     const allComics = await db.comics.orderBy("importedAt").reverse().toArray();
