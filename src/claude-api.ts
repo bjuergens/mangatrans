@@ -193,10 +193,14 @@ Important:
   }
 
   const rawResponse = textBlock.text;
-  const parsed = JSON.parse(stripCodeFences(rawResponse)) as {
-    regions: ExtractedRegion[];
-    visualContext: string;
-  };
+  let parsed: { regions: ExtractedRegion[]; visualContext: string };
+  try {
+    parsed = JSON.parse(stripCodeFences(rawResponse));
+  } catch (e) {
+    throw new Error(
+      `Failed to parse scan response as JSON: ${e instanceof Error ? e.message : e}\n\nRaw response (first 500 chars):\n${rawResponse.slice(0, 500)}`,
+    );
+  }
 
   log.info(
     `✅ Page scan complete: ${parsed.regions.length} text regions found`,
@@ -288,11 +292,18 @@ Important:
   }
 
   const rawResponse = textBlock.text;
-  const parsed = JSON.parse(stripCodeFences(rawResponse)) as {
+  let parsed: {
     vocabulary: VocabEntry[];
     grammar: GrammarPoint[];
     suggestedTranslation: string;
   };
+  try {
+    parsed = JSON.parse(stripCodeFences(rawResponse));
+  } catch (e) {
+    throw new Error(
+      `Failed to parse analysis response as JSON: ${e instanceof Error ? e.message : e}\n\nRaw response (first 500 chars):\n${rawResponse.slice(0, 500)}`,
+    );
+  }
 
   log.info(`✅ Analysis complete for: "${text.slice(0, 30)}..."`);
   return {
