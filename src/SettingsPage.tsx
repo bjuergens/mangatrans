@@ -117,7 +117,16 @@ export default function SettingsPage() {
         <h2 className="mb-2 text-lg font-semibold">Anthropic API Key</h2>
         <p className="mb-3 text-sm text-gray-500">
           Your API key is stored locally in your browser and only sent to
-          Anthropic&apos;s API when you trigger analysis.
+          Anthropic&apos;s API when you trigger analysis. Get your key at{" "}
+          <a
+            href="https://console.anthropic.com/settings/keys"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="text-blue-600 hover:underline"
+          >
+            console.anthropic.com
+          </a>{" "}
+          &rarr; Settings &rarr; API Keys &rarr; Create Key.
         </p>
         <div className="flex gap-2">
           <input
