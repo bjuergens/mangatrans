@@ -1,1 +1,0 @@
-if('serviceWorker' in navigator) {window.addEventListener('load', () => {navigator.serviceWorker.register('/mangatrans/branches/claude-vision-api-text-extraction-Ittnr/sw.js', { scope: '/mangatrans/branches/claude-vision-api-text-extraction-Ittnr/' })})}
