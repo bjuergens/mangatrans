@@ -1,0 +1,41 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <title>MangaTrans</title>
+    <script>
+      // GitHub Pages SPA redirect: encode the path into a query param
+      // so index.html can restore the correct route on load.
+      // See: https://github.com/rafgraph/spa-github-pages
+
+      // Don't redirect static file requests — let them 404 naturally
+      // so CI logs (.txt, .log, .json) are not swallowed by the SPA.
+      if (
+        /\.\w+$/.test(window.location.pathname) &&
+        !/\.html?$/.test(window.location.pathname)
+      ) {
+        // This is a request for a static file (not .html), let the 404 stand.
+      } else {
+        var segments = window.location.pathname.split("/").filter(Boolean);
+        var repo = segments[0]; // e.g. "mangatrans"
+
+        // Detect preview branch deployments: /repo/branches/<name>/...
+        // The base path includes everything up to and including the branch name.
+        var basePath;
+        var rest;
+        if (segments[1] === "branches" && segments.length >= 3) {
+          basePath = "/" + repo + "/branches/" + segments[2] + "/";
+          rest = segments.slice(3).join("/");
+        } else {
+          basePath = "/" + repo + "/";
+          rest = segments.slice(1).join("/");
+        }
+
+        window.location.replace(
+          window.location.origin + basePath + "?" + rest + window.location.hash,
+        );
+      }
+    </script>
+  </head>
+  <body></body>
+</html>

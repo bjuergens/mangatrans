@@ -1,0 +1,1 @@
+if('serviceWorker' in navigator) {window.addEventListener('load', () => {navigator.serviceWorker.register('/mangatrans/branches/claude-fix-textbox-overlay-pENDa/sw.js', { scope: '/mangatrans/branches/claude-fix-textbox-overlay-pENDa/' })})}
