@@ -1,7 +1,7 @@
 import { useEffect, useState, useCallback, useRef } from "react";
 import { useParams, useNavigate, Link } from "react-router-dom";
 import { db, type TextRegion, type Analysis } from "./db";
-import { scanPage, analyzeTextRegion } from "./claude-api";
+import { anthropic } from "./claude-api";
 import { createNavigate } from "./router";
 import { Logger } from "./logger";
 
@@ -117,13 +117,6 @@ export default function ReaderPage() {
     setError(null);
 
     try {
-      const apiKeySetting = await db.settings.get("apiKey");
-      if (!apiKeySetting?.value) {
-        setError("No API key configured. Go to Settings to add one.");
-        setScanning(false);
-        return;
-      }
-
       const page = await db.pages.get(pageId);
       if (!page) {
         setError("Page not found");
@@ -131,7 +124,7 @@ export default function ReaderPage() {
         return;
       }
 
-      const result = await scanPage(apiKeySetting.value, page.imageBlob);
+      const result = await anthropic.scanPage(page.imageBlob);
 
       // Clear old regions and analyses for this page
       const oldRegions = await db.textRegions
@@ -186,13 +179,6 @@ export default function ReaderPage() {
     setError(null);
 
     try {
-      const apiKeySetting = await db.settings.get("apiKey");
-      if (!apiKeySetting?.value) {
-        setError("No API key configured. Go to Settings to add one.");
-        setAnalyzing(false);
-        return;
-      }
-
       const page = await db.pages.get(pageId);
       if (!page?.visualContext) {
         setError("Page has not been scanned yet. Scan first.");
@@ -209,8 +195,7 @@ export default function ReaderPage() {
           `Analyzing region ${i + 1}/${updatedRegions.length}...`,
         );
 
-        const result = await analyzeTextRegion(
-          apiKeySetting.value,
+        const result = await anthropic.analyzeTextRegion(
           rwa.region.text,
           rwa.region.type,
           page.visualContext,

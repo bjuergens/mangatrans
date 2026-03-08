@@ -6,6 +6,8 @@ export const test = base.extend<{ captureConsole: void }>({
     async ({ page }, use, testInfo) => {
       const messages: string[] = [];
       page.on("console", (msg) => {
+        // Skip debug-level messages (verbose API logs, etc.)
+        if (msg.type() === "debug") return;
         const line = `[${msg.type()}] ${msg.text()}`;
         messages.push(line);
         console.log(`  🌐 ${line}`);

@@ -5,7 +5,13 @@ export class Logger {
 
   private log(level: LogLevel, message: string): void {
     const timestamp = new Date().toISOString().slice(0, 19);
-    console.log(`${timestamp} [${this.context}] [${level}] ${message}`);
+    const formatted = `${timestamp} [${this.context}] [${level}] ${message}`;
+    // debug goes to console.debug so e2e test fixtures can filter it out
+    if (level === "debug") {
+      console.debug(formatted);
+    } else {
+      console.log(formatted);
+    }
   }
 
   debug(message: string): void {
