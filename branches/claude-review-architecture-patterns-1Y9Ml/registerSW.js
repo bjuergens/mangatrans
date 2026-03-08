@@ -1,0 +1,1 @@
+if('serviceWorker' in navigator) {window.addEventListener('load', () => {navigator.serviceWorker.register('/mangatrans/branches/claude-review-architecture-patterns-1Y9Ml/sw.js', { scope: '/mangatrans/branches/claude-review-architecture-patterns-1Y9Ml/' })})}
