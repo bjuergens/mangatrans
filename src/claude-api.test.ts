@@ -1,12 +1,15 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
-import { testApiKey, scanPage, analyzeTextRegion } from "./claude-api";
+import { anthropic } from "./claude-api";
+import { db } from "./db";
 
 const mockFetch = vi.fn();
-beforeEach(() => {
+beforeEach(async () => {
   vi.stubGlobal("fetch", mockFetch);
+  await db.settings.put({ key: "apiKey", value: "sk-ant-test" });
 });
-afterEach(() => {
+afterEach(async () => {
   vi.restoreAllMocks();
+  await db.settings.clear();
 });
 
 describe("testApiKey", () => {
@@ -25,7 +28,7 @@ describe("testApiKey", () => {
       }),
     });
 
-    const result = await testApiKey("sk-ant-test");
+    const result = await anthropic.testApiKey();
     expect(result.valid).toBe(true);
     expect(result.models).toHaveLength(1);
     expect(result.models[0]!.display_name).toBe("Claude Sonnet 4");
@@ -42,12 +45,12 @@ describe("testApiKey", () => {
     mockFetch.mockResolvedValueOnce({
       ok: false,
       status: 401,
-      text: async () => '{"error":"invalid_api_key"}',
+      text: async () => '{"error":{"message":"invalid_api_key"}}',
     });
 
-    const result = await testApiKey("bad-key");
+    const result = await anthropic.testApiKey();
     expect(result.valid).toBe(false);
-    expect(result.error).toContain("API key test failed");
+    expect(result.error).toContain("invalid_api_key");
   });
 });
 
@@ -72,7 +75,7 @@ describe("scanPage", () => {
     });
 
     const blob = new Blob(["fake-image"], { type: "image/jpeg" });
-    const result = await scanPage("sk-ant-test", blob);
+    const result = await anthropic.scanPage(blob);
 
     expect(result.regions).toHaveLength(1);
     expect(result.regions[0]!.text).toBe("こんにちは");
@@ -103,7 +106,7 @@ describe("scanPage", () => {
     });
 
     const blob = new Blob(["fake-image"], { type: "image/jpeg" });
-    const result = await scanPage("sk-ant-test", blob);
+    const result = await anthropic.scanPage(blob);
     expect(result.regions).toHaveLength(1);
     expect(result.regions[0]!.text).toBe("テスト");
   });
@@ -116,9 +119,7 @@ describe("scanPage", () => {
     });
 
     const blob = new Blob(["fake"], { type: "image/jpeg" });
-    await expect(scanPage("sk-ant-test", blob)).rejects.toThrow(
-      "Page scan failed",
-    );
+    await expect(anthropic.scanPage(blob)).rejects.toThrow("/messages");
   });
 });
 
@@ -150,8 +151,7 @@ describe("analyzeTextRegion", () => {
       }),
     });
 
-    const result = await analyzeTextRegion(
-      "sk-ant-test",
+    const result = await anthropic.analyzeTextRegion(
       "こんにちは",
       "dialogue",
       "A girl in a park",
@@ -175,7 +175,7 @@ describe("analyzeTextRegion", () => {
     });
 
     await expect(
-      analyzeTextRegion("sk-ant-test", "test", "dialogue", "context"),
-    ).rejects.toThrow("Analysis failed");
+      anthropic.analyzeTextRegion("test", "dialogue", "context"),
+    ).rejects.toThrow("/messages");
   });
 });

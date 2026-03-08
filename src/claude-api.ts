@@ -1,21 +1,10 @@
 import { Logger } from "./logger";
-import type { RegionType, VocabEntry, GrammarPoint } from "./db";
-
-const log = new Logger("ClaudeAPI");
+import { db, type RegionType, type VocabEntry, type GrammarPoint } from "./db";
 
 const API_BASE = "https://api.anthropic.com/v1";
 const API_VERSION = "2023-06-01";
 const VISION_MODEL = "claude-sonnet-4-20250514";
 const ANALYSIS_MODEL = "claude-sonnet-4-20250514";
-
-function apiHeaders(apiKey: string): Record<string, string> {
-  return {
-    "x-api-key": apiKey,
-    "anthropic-version": API_VERSION,
-    "anthropic-dangerous-direct-browser-access": "true",
-    "content-type": "application/json",
-  };
-}
 
 /** Strip markdown code fences (```json ... ```) that Claude sometimes wraps around JSON. */
 function stripCodeFences(text: string): string {
@@ -24,23 +13,16 @@ function stripCodeFences(text: string): string {
   return match ? match[1]! : trimmed;
 }
 
-/** Parse an Anthropic API error response into a human-readable message. */
-async function parseApiError(
-  response: Response,
-  context: string,
-): Promise<string> {
-  const text = await response.text();
-  try {
-    const json = JSON.parse(text) as {
-      error?: { type?: string; message?: string };
-    };
-    if (json.error?.message) {
-      return `${context}: ${json.error.message}`;
-    }
-  } catch {
-    // not JSON, fall through
-  }
-  return `${context}: HTTP ${response.status} — ${text}`;
+/** Censor an API key for logging: show prefix and last 4 chars. */
+function censorApiKey(key: string): string {
+  if (key.length <= 10) return "***";
+  return key.slice(0, 7) + "..." + key.slice(-4);
+}
+
+/** Truncate a string for debug logging. */
+function truncate(s: string, max: number): string {
+  if (s.length <= max) return s;
+  return s.slice(0, max) + `... (${s.length} chars total)`;
 }
 
 export interface ModelInfo {
@@ -56,29 +38,6 @@ export interface ApiKeyTestResult {
   error?: string;
 }
 
-/** Validate an API key by calling GET /v1/models. No tokens consumed. */
-export async function testApiKey(apiKey: string): Promise<ApiKeyTestResult> {
-  log.info("🔍 Testing API key...");
-  const response = await fetch(`${API_BASE}/models`, {
-    method: "GET",
-    headers: {
-      "x-api-key": apiKey,
-      "anthropic-version": API_VERSION,
-      "anthropic-dangerous-direct-browser-access": "true",
-    },
-  });
-
-  if (!response.ok) {
-    const errorMsg = await parseApiError(response, "API key test failed");
-    log.error(`❌ ${errorMsg}`);
-    return { valid: false, models: [], error: errorMsg };
-  }
-
-  const json = (await response.json()) as { data: ModelInfo[] };
-  log.info(`✅ API key valid. ${json.data.length} models available.`);
-  return { valid: true, models: json.data };
-}
-
 export interface ExtractedRegion {
   type: RegionType;
   text: string;
@@ -91,13 +50,19 @@ export interface PageScanResult {
   rawResponse: string;
 }
 
+export interface TextAnalysisResult {
+  vocabulary: VocabEntry[];
+  grammar: GrammarPoint[];
+  suggestedTranslation: string;
+  rawResponse: string;
+}
+
 /** Convert a Blob to a base64 data string for the Claude vision API. */
 async function blobToBase64(blob: Blob): Promise<string> {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
     reader.onloadend = () => {
       const dataUrl = reader.result as string;
-      // Strip the "data:...;base64," prefix
       const base64 = dataUrl.split(",")[1] ?? "";
       resolve(base64);
     };
@@ -116,30 +81,101 @@ function mediaType(
   return "image/jpeg";
 }
 
-/** Send a manga page image to Claude Vision to extract text regions. */
-export async function scanPage(
-  apiKey: string,
-  imageBlob: Blob,
-): Promise<PageScanResult> {
-  log.info("🔍 Scanning page for text regions...");
+export class AnthropicClient {
+  private log = new Logger("AnthropicClient");
 
-  const base64 = await blobToBase64(imageBlob);
-  const mimeType = mediaType(imageBlob);
+  /** Read API key from DB. Throws if not configured. */
+  private async getApiKey(): Promise<string> {
+    const setting = await db.settings.get("apiKey");
+    if (!setting?.value) {
+      throw new Error("No API key configured. Go to Settings to add one.");
+    }
+    return setting.value;
+  }
 
-  const body = {
-    model: VISION_MODEL,
-    max_tokens: 4096,
-    messages: [
-      {
-        role: "user",
-        content: [
-          {
-            type: "image",
-            source: { type: "base64", media_type: mimeType, data: base64 },
-          },
-          {
-            type: "text",
-            text: `You are analyzing a manga page to help a Japanese language learner. Do two things:
+  /** Single point for all HTTP requests to the Anthropic API. */
+  private async request(
+    method: string,
+    endpoint: string,
+    body?: unknown,
+  ): Promise<{ status: number; body: unknown }> {
+    const apiKey = await this.getApiKey();
+    const url = `${API_BASE}${endpoint}`;
+
+    this.log.info(`🌐 ${method} ${endpoint}`);
+    this.log.debug(
+      `📤 Request ${method} ${endpoint} key=${censorApiKey(apiKey)} body=${body ? truncate(JSON.stringify(body), 2000) : "none"}`,
+    );
+
+    const response = await fetch(url, {
+      method,
+      headers: {
+        "x-api-key": apiKey,
+        "anthropic-version": API_VERSION,
+        "anthropic-dangerous-direct-browser-access": "true",
+        "content-type": "application/json",
+      },
+      body: body ? JSON.stringify(body) : undefined,
+    });
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      this.log.error(`❌ ${method} ${endpoint} → ${response.status}`);
+      this.log.debug(`📥 Error response: ${truncate(errorText, 2000)}`);
+
+      // Parse Anthropic error format
+      let message = `HTTP ${response.status} — ${errorText}`;
+      try {
+        const json = JSON.parse(errorText) as {
+          error?: { message?: string };
+        };
+        if (json.error?.message) {
+          message = json.error.message;
+        }
+      } catch {
+        // not JSON, use raw text
+      }
+      throw new Error(`${endpoint}: ${message}`);
+    }
+
+    const json: unknown = await response.json();
+    this.log.info(`✅ ${method} ${endpoint} → ${response.status}`);
+    this.log.debug(`📥 Response: ${truncate(JSON.stringify(json), 2000)}`);
+
+    return { status: response.status, body: json };
+  }
+
+  /** Validate an API key by calling GET /v1/models. No tokens consumed. */
+  async testApiKey(): Promise<ApiKeyTestResult> {
+    try {
+      const { body } = await this.request("GET", "/models");
+      const data = body as { data: ModelInfo[] };
+      return { valid: true, models: data.data };
+    } catch (e) {
+      const error = e instanceof Error ? e.message : String(e);
+      return { valid: false, models: [], error };
+    }
+  }
+
+  /** Send a manga page image to Claude Vision to extract text regions. */
+  async scanPage(imageBlob: Blob): Promise<PageScanResult> {
+    const base64 = await blobToBase64(imageBlob);
+    const mimeType = mediaType(imageBlob);
+
+    const body = {
+      model: VISION_MODEL,
+      max_tokens: 4096,
+      messages: [
+        {
+          role: "user",
+          content: [
+            {
+              type: "image",
+              source: { type: "base64", media_type: mimeType, data: base64 },
+            },
+            {
+              type: "text",
+              text: `You are analyzing a manga page to help a Japanese language learner. Do two things:
 
 1. **Extract all text regions** (speech bubbles, narration boxes, sound effects) from this manga page.
 2. **Provide visual page context** — a brief description of what's happening on this page (characters, actions, setting, mood) that will help with translation later.
@@ -168,73 +204,59 @@ Important:
 - Classify each region: "dialogue" for speech bubbles, "narration" for narration boxes/captions, "sfx" for sound effects
 - Order regions roughly by reading order (right-to-left, top-to-bottom for manga)
 - Be precise with bounding boxes — they should tightly enclose only the text`,
-          },
-        ],
-      },
-    ],
-  };
+            },
+          ],
+        },
+      ],
+    };
 
-  const response = await fetch(`${API_BASE}/messages`, {
-    method: "POST",
-    headers: apiHeaders(apiKey),
-    body: JSON.stringify(body),
-  });
-
-  if (!response.ok) {
-    throw new Error(await parseApiError(response, "Page scan failed"));
-  }
-
-  const json = (await response.json()) as {
-    content: Array<{ type: string; text?: string }>;
-  };
-  const textBlock = json.content.find((b) => b.type === "text");
-  if (!textBlock?.text) {
-    throw new Error("Claude returned no text content in scan response");
-  }
-
-  const rawResponse = textBlock.text;
-  let parsed: { regions: ExtractedRegion[]; visualContext: string };
-  try {
-    parsed = JSON.parse(stripCodeFences(rawResponse));
-  } catch (e) {
-    throw new Error(
-      `Failed to parse scan response as JSON: ${e instanceof Error ? e.message : e}\n\nRaw response (first 500 chars):\n${rawResponse.slice(0, 500)}`,
+    const { body: responseBody } = await this.request(
+      "POST",
+      "/messages",
+      body,
     );
+
+    const json = responseBody as {
+      content: Array<{ type: string; text?: string }>;
+    };
+    const textBlock = json.content.find((b) => b.type === "text");
+    if (!textBlock?.text) {
+      throw new Error("Claude returned no text content in scan response");
+    }
+
+    const rawResponse = textBlock.text;
+    let parsed: { regions: ExtractedRegion[]; visualContext: string };
+    try {
+      parsed = JSON.parse(stripCodeFences(rawResponse));
+    } catch (e) {
+      throw new Error(
+        `Failed to parse scan response as JSON: ${e instanceof Error ? e.message : e}\n\nRaw response (first 500 chars):\n${rawResponse.slice(0, 500)}`,
+      );
+    }
+
+    this.log.info(
+      `🔍 Page scan complete: ${parsed.regions.length} text regions found`,
+    );
+    return {
+      regions: parsed.regions,
+      visualContext: parsed.visualContext,
+      rawResponse,
+    };
   }
 
-  log.info(
-    `✅ Page scan complete: ${parsed.regions.length} text regions found`,
-  );
-  return {
-    regions: parsed.regions,
-    visualContext: parsed.visualContext,
-    rawResponse,
-  };
-}
-
-export interface TextAnalysisResult {
-  vocabulary: VocabEntry[];
-  grammar: GrammarPoint[];
-  suggestedTranslation: string;
-  rawResponse: string;
-}
-
-/** Analyze a text region for vocabulary, grammar, and translation. */
-export async function analyzeTextRegion(
-  apiKey: string,
-  text: string,
-  regionType: RegionType,
-  visualContext: string,
-): Promise<TextAnalysisResult> {
-  log.info(`🔍 Analyzing text region: "${text.slice(0, 30)}..."`);
-
-  const body = {
-    model: ANALYSIS_MODEL,
-    max_tokens: 2048,
-    messages: [
-      {
-        role: "user",
-        content: `You are helping a Japanese language learner (A1-A2 level) understand manga text.
+  /** Analyze a text region for vocabulary, grammar, and translation. */
+  async analyzeTextRegion(
+    text: string,
+    regionType: RegionType,
+    visualContext: string,
+  ): Promise<TextAnalysisResult> {
+    const body = {
+      model: ANALYSIS_MODEL,
+      max_tokens: 2048,
+      messages: [
+        {
+          role: "user",
+          content: `You are helping a Japanese language learner (A1-A2 level) understand manga text.
 
 **Page context:** ${visualContext}
 
@@ -269,47 +291,46 @@ Important:
 - Explain grammar patterns at A1-A2 level — assume the learner knows basic hiragana/katakana but needs help with most kanji and grammar
 - The translation should be natural English, not word-for-word
 - Consider the visual page context when interpreting ambiguous text`,
-      },
-    ],
-  };
+        },
+      ],
+    };
 
-  const response = await fetch(`${API_BASE}/messages`, {
-    method: "POST",
-    headers: apiHeaders(apiKey),
-    body: JSON.stringify(body),
-  });
-
-  if (!response.ok) {
-    throw new Error(await parseApiError(response, "Analysis failed"));
-  }
-
-  const json = (await response.json()) as {
-    content: Array<{ type: string; text?: string }>;
-  };
-  const textBlock = json.content.find((b) => b.type === "text");
-  if (!textBlock?.text) {
-    throw new Error("Claude returned no text content in analysis response");
-  }
-
-  const rawResponse = textBlock.text;
-  let parsed: {
-    vocabulary: VocabEntry[];
-    grammar: GrammarPoint[];
-    suggestedTranslation: string;
-  };
-  try {
-    parsed = JSON.parse(stripCodeFences(rawResponse));
-  } catch (e) {
-    throw new Error(
-      `Failed to parse analysis response as JSON: ${e instanceof Error ? e.message : e}\n\nRaw response (first 500 chars):\n${rawResponse.slice(0, 500)}`,
+    const { body: responseBody } = await this.request(
+      "POST",
+      "/messages",
+      body,
     );
-  }
 
-  log.info(`✅ Analysis complete for: "${text.slice(0, 30)}..."`);
-  return {
-    vocabulary: parsed.vocabulary,
-    grammar: parsed.grammar,
-    suggestedTranslation: parsed.suggestedTranslation,
-    rawResponse,
-  };
+    const json = responseBody as {
+      content: Array<{ type: string; text?: string }>;
+    };
+    const textBlock = json.content.find((b) => b.type === "text");
+    if (!textBlock?.text) {
+      throw new Error("Claude returned no text content in analysis response");
+    }
+
+    const rawResponse = textBlock.text;
+    let parsed: {
+      vocabulary: VocabEntry[];
+      grammar: GrammarPoint[];
+      suggestedTranslation: string;
+    };
+    try {
+      parsed = JSON.parse(stripCodeFences(rawResponse));
+    } catch (e) {
+      throw new Error(
+        `Failed to parse analysis response as JSON: ${e instanceof Error ? e.message : e}\n\nRaw response (first 500 chars):\n${rawResponse.slice(0, 500)}`,
+      );
+    }
+
+    this.log.info(`🔍 Analysis complete for: "${text.slice(0, 30)}..."`);
+    return {
+      vocabulary: parsed.vocabulary,
+      grammar: parsed.grammar,
+      suggestedTranslation: parsed.suggestedTranslation,
+      rawResponse,
+    };
+  }
 }
+
+export const anthropic = new AnthropicClient();

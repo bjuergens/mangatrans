@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { db } from "./db";
-import { testApiKey, type ModelInfo } from "./claude-api";
+import { anthropic, type ModelInfo } from "./claude-api";
 import { redirectToAppRoot, assetUrl } from "./router";
 
 type TextExtractionBackend = "ai-vision" | "local-ocr";
@@ -74,7 +74,7 @@ export default function SettingsPage() {
   async function handleTestApiKey() {
     setTesting(true);
     setTestResult(null);
-    const result = await testApiKey(savedApiKey);
+    const result = await anthropic.testApiKey();
     setTestResult(result);
     setTesting(false);
   }
