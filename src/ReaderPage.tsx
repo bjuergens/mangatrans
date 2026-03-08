@@ -38,7 +38,10 @@ export default function ReaderPage() {
 
   // Overlay interaction state
   const [hoveredRegion, setHoveredRegion] = useState<number | null>(null);
-  const [toggledRegions, setToggledRegions] = useState<Set<number>>(new Set());
+  // 0 = transparent, 1 = OCR text, 2 = translation
+  const [toggledRegions, setToggledRegions] = useState<Map<number, 1 | 2>>(
+    new Map(),
+  );
   const [tooltipPos, setTooltipPos] = useState<{
     x: number;
     y: number;
@@ -107,7 +110,7 @@ export default function ReaderPage() {
   // Reset interaction state when navigating pages
   useEffect(() => {
     setHoveredRegion(null);
-    setToggledRegions(new Set());
+    setToggledRegions(new Map());
     setTooltipPos(null);
   }, [pageNum]);
 
@@ -163,7 +166,9 @@ export default function ReaderPage() {
         }),
       );
       setRegions(newRegions);
-      setToggledRegions(new Set());
+      setHoveredRegion(null);
+      setToggledRegions(new Map());
+      setTooltipPos(null);
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e);
       log.error(`Scan failed: ${msg}`);
@@ -229,13 +234,16 @@ export default function ReaderPage() {
     navigate(`/reader/${comicIdNum}/${n}`);
   }
 
-  function toggleRegion(regionId: number) {
+  function toggleRegion(regionId: number, hasAnalysis: boolean) {
     setToggledRegions((prev) => {
-      const next = new Set(prev);
-      if (next.has(regionId)) {
-        next.delete(regionId);
+      const next = new Map(prev);
+      const current = next.get(regionId) ?? 0;
+      if (current === 0) {
+        next.set(regionId, 1);
+      } else if (current === 1 && hasAnalysis) {
+        next.set(regionId, 2);
       } else {
-        next.add(regionId);
+        next.delete(regionId);
       }
       return next;
     });
@@ -354,23 +362,22 @@ export default function ReaderPage() {
 
       {/* Page image with text region overlays */}
       <div
-        ref={imageContainerRef}
-        className="relative flex w-full max-w-2xl items-center justify-center rounded bg-gray-100"
+        className="flex w-full max-w-2xl items-center justify-center rounded bg-gray-100"
         data-testid="page-container"
       >
         {imageUrl ? (
-          <>
+          <div ref={imageContainerRef} className="relative inline-block">
             <img
               src={imageUrl}
               alt={`${title} page ${pageNum}`}
               className="max-h-[80vh] w-auto rounded"
               data-testid="page-image"
             />
-            {/* Text region overlays */}
+            {/* Text region overlays — positioned as % of rendered image size */}
             {regions.map(({ region, analysis }) => {
               const [x, y, w, h] = region.bbox;
-              const isToggled = toggledRegions.has(region.id);
               const hasAnalysis = !!analysis;
+              const toggleState = toggledRegions.get(region.id) ?? 0;
               const borderColor = hasAnalysis
                 ? "border-green-400"
                 : "border-yellow-400";
@@ -386,24 +393,24 @@ export default function ReaderPage() {
                     height: `${h * 100}%`,
                   }}
                   data-testid={`text-region-${region.id}`}
-                  onClick={() => toggleRegion(region.id)}
+                  onClick={() => toggleRegion(region.id, hasAnalysis)}
                   onMouseEnter={(e) => handleRegionMouseEnter(region.id, e)}
                   onMouseMove={updateTooltipPosition}
                   onMouseLeave={() => setHoveredRegion(null)}
                 >
-                  {/* Show translation text when toggled */}
-                  {isToggled && analysis && (
-                    <div className="absolute inset-0 flex items-center justify-center overflow-hidden bg-white/90 p-1">
-                      <span className="text-center text-xs leading-tight text-gray-800">
-                        {analysis.suggestedTranslation}
-                      </span>
-                    </div>
-                  )}
-                  {/* Show original text when toggled but no analysis */}
-                  {isToggled && !analysis && (
+                  {/* State 1: OCR text */}
+                  {toggleState === 1 && (
                     <div className="absolute inset-0 flex items-center justify-center overflow-hidden bg-white/90 p-1">
                       <span className="text-center text-xs leading-tight text-gray-800">
                         {region.text}
+                      </span>
+                    </div>
+                  )}
+                  {/* State 2: Translation */}
+                  {toggleState === 2 && analysis && (
+                    <div className="absolute inset-0 flex items-center justify-center overflow-hidden bg-white/90 p-1">
+                      <span className="text-center text-xs leading-tight text-gray-800">
+                        {analysis.suggestedTranslation}
                       </span>
                     </div>
                   )}
@@ -468,7 +475,7 @@ export default function ReaderPage() {
                 )}
               </div>
             )}
-          </>
+          </div>
         ) : (
           <div className="p-12 text-gray-400">Loading page...</div>
         )}
