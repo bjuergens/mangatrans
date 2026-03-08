@@ -1,6 +1,6 @@
 import { useEffect, useState, useCallback, useRef } from "react";
 import { useParams, useNavigate, Link } from "react-router-dom";
-import { db, type TextRegion, type Analysis, type TextDirection } from "./db";
+import { db, type TextRegion, type Analysis } from "./db";
 import { anthropic, cropImage } from "./claude-api";
 import { createNavigate } from "./router";
 import { Logger } from "./logger";
@@ -394,7 +394,7 @@ export default function ReaderPage() {
 
   function adjustBbox(
     regionId: number,
-    field: "x" | "y" | "size",
+    field: "x" | "y" | "w" | "h",
     delta: number,
   ) {
     const entry = regions.find((r) => r.region.id === regionId);
@@ -405,16 +405,12 @@ export default function ReaderPage() {
       newBbox = [Math.max(0, Math.min(1 - w, x + delta)), y, w, h];
     } else if (field === "y") {
       newBbox = [x, Math.max(0, Math.min(1 - h, y + delta)), w, h];
+    } else if (field === "w") {
+      newBbox = [x, y, Math.max(0.02, Math.min(1, w + delta)), h];
     } else {
-      // size — keep square
-      const newSize = Math.max(0.02, Math.min(1, w + delta));
-      newBbox = [x, y, newSize, newSize];
+      newBbox = [x, y, w, Math.max(0.02, Math.min(1, h + delta))];
     }
     updateRegionInDb(regionId, { bbox: newBbox });
-  }
-
-  function setRegionDirection(regionId: number, dir: TextDirection) {
-    updateRegionInDb(regionId, { textDirection: dir });
   }
 
   function toggleFurigana(regionId: number) {
@@ -795,15 +791,15 @@ export default function ReaderPage() {
               </button>
             </div>
 
-            {/* Size */}
+            {/* Width */}
             <div className="flex items-center gap-1">
-              <span className="text-gray-500">Size:</span>
+              <span className="text-gray-500">W:</span>
               <button
                 onClick={() =>
-                  adjustBbox(selectedRegion.region.id, "size", -BOX_STEP)
+                  adjustBbox(selectedRegion.region.id, "w", -BOX_STEP)
                 }
                 className="rounded bg-gray-100 px-2 py-1 hover:bg-gray-200"
-                data-testid="size-minus-btn"
+                data-testid="w-minus-btn"
               >
                 -
               </button>
@@ -812,34 +808,39 @@ export default function ReaderPage() {
               </span>
               <button
                 onClick={() =>
-                  adjustBbox(selectedRegion.region.id, "size", BOX_STEP)
+                  adjustBbox(selectedRegion.region.id, "w", BOX_STEP)
                 }
                 className="rounded bg-gray-100 px-2 py-1 hover:bg-gray-200"
-                data-testid="size-plus-btn"
+                data-testid="w-plus-btn"
               >
                 +
               </button>
             </div>
 
-            {/* Text Direction */}
+            {/* Height */}
             <div className="flex items-center gap-1">
-              <span className="text-gray-500">Dir:</span>
-              {(["ttb", "rtl", "ltr"] as TextDirection[]).map((dir) => (
-                <button
-                  key={dir}
-                  onClick={() =>
-                    setRegionDirection(selectedRegion.region.id, dir)
-                  }
-                  className={`rounded px-2 py-1 ${
-                    selectedRegion.region.textDirection === dir
-                      ? "bg-blue-600 text-white"
-                      : "bg-gray-100 hover:bg-gray-200"
-                  }`}
-                  data-testid={`dir-${dir}-btn`}
-                >
-                  {dir.toUpperCase()}
-                </button>
-              ))}
+              <span className="text-gray-500">H:</span>
+              <button
+                onClick={() =>
+                  adjustBbox(selectedRegion.region.id, "h", -BOX_STEP)
+                }
+                className="rounded bg-gray-100 px-2 py-1 hover:bg-gray-200"
+                data-testid="h-minus-btn"
+              >
+                -
+              </button>
+              <span className="w-10 text-center">
+                {Math.round(selectedRegion.region.bbox[3] * 100)}%
+              </span>
+              <button
+                onClick={() =>
+                  adjustBbox(selectedRegion.region.id, "h", BOX_STEP)
+                }
+                className="rounded bg-gray-100 px-2 py-1 hover:bg-gray-200"
+                data-testid="h-plus-btn"
+              >
+                +
+              </button>
             </div>
 
             {/* Furigana toggle */}

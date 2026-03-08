@@ -33,7 +33,7 @@ export interface TextRegion {
   type: RegionType;
   /** Extracted Japanese text (empty after detection, filled after OCR) */
   text: string;
-  /** Bounding box: [x, y, size, size] as fractions of page dimensions (0-1). Boxes are square. */
+  /** Bounding box: [x, y, width, height] as fractions of page dimensions (0-1) */
   bbox: [number, number, number, number];
   /** Text reading direction */
   textDirection?: TextDirection;
