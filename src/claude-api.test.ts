@@ -47,7 +47,7 @@ describe("testApiKey", () => {
 
     const result = await testApiKey("bad-key");
     expect(result.valid).toBe(false);
-    expect(result.error).toContain("401");
+    expect(result.error).toContain("API key test failed");
   });
 });
 
@@ -95,7 +95,7 @@ describe("scanPage", () => {
 
     const blob = new Blob(["fake"], { type: "image/jpeg" });
     await expect(scanPage("sk-ant-test", blob)).rejects.toThrow(
-      "Claude API scan failed: HTTP 500",
+      "Page scan failed",
     );
   });
 });
@@ -154,6 +154,6 @@ describe("analyzeTextRegion", () => {
 
     await expect(
       analyzeTextRegion("sk-ant-test", "test", "dialogue", "context"),
-    ).rejects.toThrow("Claude API analysis failed: HTTP 429");
+    ).rejects.toThrow("Analysis failed");
   });
 });
