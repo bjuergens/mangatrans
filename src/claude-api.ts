@@ -17,6 +17,13 @@ function apiHeaders(apiKey: string): Record<string, string> {
   };
 }
 
+/** Strip markdown code fences (```json ... ```) that Claude sometimes wraps around JSON. */
+function stripCodeFences(text: string): string {
+  const trimmed = text.trim();
+  const match = trimmed.match(/^```(?:\w*)\n([\s\S]*?)\n```$/);
+  return match ? match[1]! : trimmed;
+}
+
 /** Parse an Anthropic API error response into a human-readable message. */
 async function parseApiError(
   response: Response,
@@ -186,7 +193,7 @@ Important:
   }
 
   const rawResponse = textBlock.text;
-  const parsed = JSON.parse(rawResponse) as {
+  const parsed = JSON.parse(stripCodeFences(rawResponse)) as {
     regions: ExtractedRegion[];
     visualContext: string;
   };
@@ -281,7 +288,7 @@ Important:
   }
 
   const rawResponse = textBlock.text;
-  const parsed = JSON.parse(rawResponse) as {
+  const parsed = JSON.parse(stripCodeFences(rawResponse)) as {
     vocabulary: VocabEntry[];
     grammar: GrammarPoint[];
     suggestedTranslation: string;
