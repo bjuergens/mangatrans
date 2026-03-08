@@ -17,6 +17,25 @@ function apiHeaders(apiKey: string): Record<string, string> {
   };
 }
 
+/** Parse an Anthropic API error response into a human-readable message. */
+async function parseApiError(
+  response: Response,
+  context: string,
+): Promise<string> {
+  const text = await response.text();
+  try {
+    const json = JSON.parse(text) as {
+      error?: { type?: string; message?: string };
+    };
+    if (json.error?.message) {
+      return `${context}: ${json.error.message}`;
+    }
+  } catch {
+    // not JSON, fall through
+  }
+  return `${context}: HTTP ${response.status} — ${text}`;
+}
+
 export interface ModelInfo {
   id: string;
   display_name: string;
@@ -43,13 +62,9 @@ export async function testApiKey(apiKey: string): Promise<ApiKeyTestResult> {
   });
 
   if (!response.ok) {
-    const body = await response.text();
-    log.error(`❌ API key test failed: ${response.status} ${body}`);
-    return {
-      valid: false,
-      models: [],
-      error: `HTTP ${response.status}: ${body}`,
-    };
+    const errorMsg = await parseApiError(response, "API key test failed");
+    log.error(`❌ ${errorMsg}`);
+    return { valid: false, models: [], error: errorMsg };
   }
 
   const json = (await response.json()) as { data: ModelInfo[] };
@@ -159,10 +174,7 @@ Important:
   });
 
   if (!response.ok) {
-    const errorBody = await response.text();
-    throw new Error(
-      `Claude API scan failed: HTTP ${response.status} — ${errorBody}`,
-    );
+    throw new Error(await parseApiError(response, "Page scan failed"));
   }
 
   const json = (await response.json()) as {
@@ -170,7 +182,7 @@ Important:
   };
   const textBlock = json.content.find((b) => b.type === "text");
   if (!textBlock?.text) {
-    throw new Error("Claude API returned no text content in scan response");
+    throw new Error("Claude returned no text content in scan response");
   }
 
   const rawResponse = textBlock.text;
@@ -257,10 +269,7 @@ Important:
   });
 
   if (!response.ok) {
-    const errorBody = await response.text();
-    throw new Error(
-      `Claude API analysis failed: HTTP ${response.status} — ${errorBody}`,
-    );
+    throw new Error(await parseApiError(response, "Analysis failed"));
   }
 
   const json = (await response.json()) as {
@@ -268,7 +277,7 @@ Important:
   };
   const textBlock = json.content.find((b) => b.type === "text");
   if (!textBlock?.text) {
-    throw new Error("Claude API returned no text content in analysis response");
+    throw new Error("Claude returned no text content in analysis response");
   }
 
   const rawResponse = textBlock.text;
