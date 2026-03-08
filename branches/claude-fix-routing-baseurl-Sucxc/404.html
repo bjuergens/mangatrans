@@ -25,10 +25,10 @@
         var rest;
         if (segments[1] === "branches" && segments.length >= 3) {
           basePath = "/" + repo + "/branches/" + segments[2] + "/";
-          rest = "/" + segments.slice(3).join("/");
+          rest = segments.slice(3).join("/");
         } else {
           basePath = "/" + repo + "/";
-          rest = "/" + segments.slice(1).join("/");
+          rest = segments.slice(1).join("/");
         }
 
         window.location.replace(
