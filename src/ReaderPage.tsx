@@ -314,36 +314,45 @@ export default function ReaderPage() {
       </div>
 
       {/* Action buttons */}
-      {hasApiKey && (
-        <div
-          className="mb-3 flex items-center gap-2"
-          data-testid="scan-controls"
+      <div className="mb-3 flex items-center gap-2" data-testid="scan-controls">
+        <button
+          onClick={handleScan}
+          disabled={!hasApiKey || scanning || analyzing}
+          className="rounded-lg bg-blue-600 px-4 py-2 text-sm text-white hover:bg-blue-700 disabled:opacity-50"
+          data-testid="scan-page-btn"
         >
+          {scanning ? "Scanning..." : scanned ? "Re-scan Page" : "Scan Page"}
+        </button>
+        {regions.length > 0 && !allAnalyzed && (
           <button
-            onClick={handleScan}
-            disabled={scanning || analyzing}
-            className="rounded-lg bg-blue-600 px-4 py-2 text-sm text-white hover:bg-blue-700 disabled:opacity-50"
-            data-testid="scan-page-btn"
+            onClick={handleAnalyze}
+            disabled={!hasApiKey || analyzing || scanning}
+            className="rounded-lg bg-green-600 px-4 py-2 text-sm text-white hover:bg-green-700 disabled:opacity-50"
+            data-testid="analyze-btn"
           >
-            {scanning ? "Scanning..." : scanned ? "Re-scan Page" : "Scan Page"}
+            {analyzing ? analyzeProgress || "Analyzing..." : "Analyze All"}
           </button>
-          {regions.length > 0 && !allAnalyzed && (
-            <button
-              onClick={handleAnalyze}
-              disabled={analyzing || scanning}
-              className="rounded-lg bg-green-600 px-4 py-2 text-sm text-white hover:bg-green-700 disabled:opacity-50"
-              data-testid="analyze-btn"
-            >
-              {analyzing ? analyzeProgress || "Analyzing..." : "Analyze All"}
-            </button>
-          )}
-          {regions.length > 0 && (
-            <span className="text-xs text-gray-500">
-              {regions.length} region{regions.length !== 1 ? "s" : ""}
-              {someAnalyzed &&
-                ` — ${regions.filter((r) => r.analysis).length} analyzed`}
-            </span>
-          )}
+        )}
+        {regions.length > 0 && (
+          <span className="text-xs text-gray-500">
+            {regions.length} region{regions.length !== 1 ? "s" : ""}
+            {someAnalyzed &&
+              ` — ${regions.filter((r) => r.analysis).length} analyzed`}
+          </span>
+        )}
+      </div>
+
+      {/* No API key info */}
+      {!hasApiKey && (
+        <div
+          className="mb-3 w-full max-w-2xl rounded border border-blue-200 bg-blue-50 px-4 py-2 text-sm text-blue-700"
+          data-testid="no-api-key-info"
+        >
+          Add your Claude API key in{" "}
+          <Link to="/settings" className="underline hover:text-blue-900">
+            Settings
+          </Link>{" "}
+          to enable scanning and analysis.
         </div>
       )}
 
