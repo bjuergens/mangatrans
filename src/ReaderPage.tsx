@@ -37,12 +37,13 @@ export default function ReaderPage() {
   const [hasApiKey, setHasApiKey] = useState(false);
 
   // Overlay interaction state
-  const [hoveredRegion, setHoveredRegion] = useState<number | null>(null);
-  // 0 = transparent, 1 = OCR text, 2 = translation
-  const [toggledRegions, setToggledRegions] = useState<Map<number, 1 | 2>>(
-    new Map(),
-  );
-  const [tooltipPos, setTooltipPos] = useState<{
+  // 0 = transparent (default), 1 = OCR text, 2 = translation
+  const [regionDisplayMode, setRegionDisplayMode] = useState<
+    Map<number, 1 | 2>
+  >(new Map());
+  // null = no tooltip; non-null = show tooltip for regionId at (x, y) within imageContainerRef
+  const [tooltip, setTooltip] = useState<{
+    regionId: number;
     x: number;
     y: number;
   } | null>(null);
@@ -107,9 +108,8 @@ export default function ReaderPage() {
 
   // Reset interaction state when navigating pages
   useEffect(() => {
-    setHoveredRegion(null);
-    setToggledRegions(new Map());
-    setTooltipPos(null);
+    setRegionDisplayMode(new Map());
+    setTooltip(null);
   }, [pageNum]);
 
   const handleScan = useCallback(async () => {
@@ -139,7 +139,7 @@ export default function ReaderPage() {
       }
 
       // Store new regions
-      const regionIds = await db.textRegions.bulkAdd(
+      const regionIds = (await db.textRegions.bulkAdd(
         result.regions.map((r) => ({
           pageId,
           type: r.type,
@@ -147,7 +147,7 @@ export default function ReaderPage() {
           bbox: r.bbox,
         })),
         { allKeys: true },
-      );
+      )) as number[];
 
       // Update page with visual context and scanned flag
       await db.pages.update(pageId, {
@@ -156,17 +156,20 @@ export default function ReaderPage() {
       });
       setScanned(true);
 
-      // Load the newly created regions
-      const newRegions = await Promise.all(
-        (regionIds as number[]).map(async (id) => {
-          const region = (await db.textRegions.get(id))!;
-          return { region, analysis: undefined } as RegionWithAnalysis;
-        }),
-      );
+      // Build region objects from the data we already have — no need to re-fetch
+      const newRegions: RegionWithAnalysis[] = result.regions.map((r, i) => ({
+        region: {
+          id: regionIds[i]!,
+          pageId,
+          type: r.type,
+          text: r.text,
+          bbox: r.bbox,
+        },
+        analysis: undefined,
+      }));
       setRegions(newRegions);
-      setHoveredRegion(null);
-      setToggledRegions(new Map());
-      setTooltipPos(null);
+      setRegionDisplayMode(new Map());
+      setTooltip(null);
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e);
       log.error(`Scan failed: ${msg}`);
@@ -191,29 +194,37 @@ export default function ReaderPage() {
 
       const updatedRegions = [...regions];
       for (let i = 0; i < updatedRegions.length; i++) {
-        const rwa = updatedRegions[i]!;
-        if (rwa.analysis) continue; // Skip already analyzed
+        const entry = updatedRegions[i]!;
+        if (entry.analysis) continue; // Skip already analyzed
 
         setAnalyzeProgress(
           `Analyzing region ${i + 1}/${updatedRegions.length}...`,
         );
 
         const result = await anthropic.analyzeTextRegion(
-          rwa.region.text,
-          rwa.region.type,
+          entry.region.text,
+          entry.region.type,
           page.visualContext,
         );
 
-        const analysisId = await db.analyses.add({
-          textRegionId: rwa.region.id,
+        const analysisId = (await db.analyses.add({
+          textRegionId: entry.region.id,
           vocabulary: result.vocabulary,
           grammar: result.grammar,
           suggestedTranslation: result.suggestedTranslation,
           rawResponse: result.rawResponse,
-        });
+        })) as number;
 
-        const analysis = await db.analyses.get(analysisId);
-        updatedRegions[i] = { ...rwa, analysis: analysis! };
+        // Build the Analysis object from data we already have — no need to re-fetch
+        const analysis: Analysis = {
+          id: analysisId,
+          textRegionId: entry.region.id,
+          vocabulary: result.vocabulary,
+          grammar: result.grammar,
+          suggestedTranslation: result.suggestedTranslation,
+          rawResponse: result.rawResponse,
+        };
+        updatedRegions[i] = { ...entry, analysis };
         setRegions([...updatedRegions]);
       }
 
@@ -232,13 +243,18 @@ export default function ReaderPage() {
     navigate(`/reader/${comicIdNum}/${n}`);
   }
 
-  function toggleRegion(regionId: number, hasAnalysis: boolean) {
-    setToggledRegions((prev) => {
+  // Cycles the display mode for a region: transparent → OCR text → translation → transparent.
+  // Skips the translation step when the region has not been analyzed yet.
+  function cycleRegionDisplay(regionId: number) {
+    const canShowTranslation = regions.some(
+      (r) => r.region.id === regionId && !!r.analysis,
+    );
+    setRegionDisplayMode((prev) => {
       const next = new Map(prev);
       const current = next.get(regionId) ?? 0;
       if (current === 0) {
         next.set(regionId, 1);
-      } else if (current === 1 && hasAnalysis) {
+      } else if (current === 1 && canShowTranslation) {
         next.set(regionId, 2);
       } else {
         next.delete(regionId);
@@ -251,17 +267,19 @@ export default function ReaderPage() {
     regionId: number,
     e: React.MouseEvent<HTMLDivElement>,
   ) {
-    setHoveredRegion(regionId);
-    updateTooltipPosition(e);
-  }
-
-  function updateTooltipPosition(e: React.MouseEvent<HTMLDivElement>) {
     if (!imageContainerRef.current) return;
     const rect = imageContainerRef.current.getBoundingClientRect();
-    setTooltipPos({
-      x: e.clientX - rect.left,
-      y: e.clientY - rect.top,
-    });
+    setTooltip({ regionId, x: e.clientX - rect.left, y: e.clientY - rect.top });
+  }
+
+  function handleRegionMouseMove(e: React.MouseEvent<HTMLDivElement>) {
+    if (!imageContainerRef.current) return;
+    const rect = imageContainerRef.current.getBoundingClientRect();
+    setTooltip((prev) =>
+      prev
+        ? { ...prev, x: e.clientX - rect.left, y: e.clientY - rect.top }
+        : null,
+    );
   }
 
   const allAnalyzed =
@@ -284,7 +302,9 @@ export default function ReaderPage() {
     );
   }
 
-  const hoveredRwa = regions.find((r) => r.region.id === hoveredRegion);
+  const tooltipRegion = tooltip
+    ? regions.find((r) => r.region.id === tooltip.regionId)
+    : null;
 
   return (
     <div className="flex flex-col items-center p-4">
@@ -374,9 +394,8 @@ export default function ReaderPage() {
             {/* Text region overlays — positioned as % of rendered image size */}
             {regions.map(({ region, analysis }) => {
               const [x, y, w, h] = region.bbox;
-              const hasAnalysis = !!analysis;
-              const toggleState = toggledRegions.get(region.id) ?? 0;
-              const borderColor = hasAnalysis
+              const displayMode = regionDisplayMode.get(region.id) ?? 0;
+              const borderColor = analysis
                 ? "border-green-400"
                 : "border-yellow-400";
 
@@ -391,13 +410,13 @@ export default function ReaderPage() {
                     height: `${h * 100}%`,
                   }}
                   data-testid={`text-region-${region.id}`}
-                  onClick={() => toggleRegion(region.id, hasAnalysis)}
+                  onClick={() => cycleRegionDisplay(region.id)}
                   onMouseEnter={(e) => handleRegionMouseEnter(region.id, e)}
-                  onMouseMove={updateTooltipPosition}
-                  onMouseLeave={() => setHoveredRegion(null)}
+                  onMouseMove={handleRegionMouseMove}
+                  onMouseLeave={() => setTooltip(null)}
                 >
                   {/* State 1: OCR text */}
-                  {toggleState === 1 && (
+                  {displayMode === 1 && (
                     <div className="absolute inset-0 flex items-center justify-center overflow-hidden bg-white/90 p-1">
                       <span className="text-center text-xs leading-tight text-gray-800">
                         {region.text}
@@ -405,7 +424,7 @@ export default function ReaderPage() {
                     </div>
                   )}
                   {/* State 2: Translation */}
-                  {toggleState === 2 && analysis && (
+                  {displayMode === 2 && analysis && (
                     <div className="absolute inset-0 flex items-center justify-center overflow-hidden bg-white/90 p-1">
                       <span className="text-center text-xs leading-tight text-gray-800">
                         {analysis.suggestedTranslation}
@@ -417,27 +436,27 @@ export default function ReaderPage() {
             })}
 
             {/* Hover tooltip */}
-            {hoveredRegion !== null && hoveredRwa?.analysis && tooltipPos && (
+            {tooltip && tooltipRegion?.analysis && (
               <div
                 className="pointer-events-none absolute z-50 max-w-xs rounded-lg border border-gray-200 bg-white p-3 shadow-lg"
                 style={{
-                  left: `${tooltipPos.x + 12}px`,
-                  top: `${tooltipPos.y + 12}px`,
+                  left: `${tooltip.x + 12}px`,
+                  top: `${tooltip.y + 12}px`,
                 }}
                 data-testid="region-tooltip"
               >
                 <p className="mb-1 text-sm font-bold text-gray-900">
-                  {hoveredRwa.region.text}
+                  {tooltipRegion.region.text}
                 </p>
 
                 {/* Vocabulary */}
-                {hoveredRwa.analysis.vocabulary.length > 0 && (
+                {tooltipRegion.analysis.vocabulary.length > 0 && (
                   <div className="mb-2">
                     <p className="text-xs font-semibold text-blue-600">
                       Vocabulary
                     </p>
                     <ul className="space-y-0.5">
-                      {hoveredRwa.analysis.vocabulary.map((v, i) => (
+                      {tooltipRegion.analysis.vocabulary.map((v, i) => (
                         <li key={i} className="text-xs text-gray-700">
                           <span className="font-medium">{v.word}</span>
                           {v.reading !== v.word && (
@@ -455,13 +474,13 @@ export default function ReaderPage() {
                 )}
 
                 {/* Grammar */}
-                {hoveredRwa.analysis.grammar.length > 0 && (
+                {tooltipRegion.analysis.grammar.length > 0 && (
                   <div>
                     <p className="text-xs font-semibold text-purple-600">
                       Grammar
                     </p>
                     <ul className="space-y-0.5">
-                      {hoveredRwa.analysis.grammar.map((g, i) => (
+                      {tooltipRegion.analysis.grammar.map((g, i) => (
                         <li key={i} className="text-xs text-gray-700">
                           <span className="font-medium">{g.pattern}</span>
                           {" — "}
