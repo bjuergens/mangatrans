@@ -86,6 +86,28 @@ describe("scanPage", () => {
     expect(callBody.messages[0].content[0].source.type).toBe("base64");
   });
 
+  it("handles response wrapped in markdown code fences", async () => {
+    const scanResult = {
+      regions: [
+        { type: "dialogue", text: "テスト", bbox: [0.1, 0.2, 0.3, 0.1] },
+      ],
+      visualContext: "Test context",
+    };
+    const wrapped = "```json\n" + JSON.stringify(scanResult, null, 2) + "\n```";
+
+    mockFetch.mockResolvedValueOnce({
+      ok: true,
+      json: async () => ({
+        content: [{ type: "text", text: wrapped }],
+      }),
+    });
+
+    const blob = new Blob(["fake-image"], { type: "image/jpeg" });
+    const result = await scanPage("sk-ant-test", blob);
+    expect(result.regions).toHaveLength(1);
+    expect(result.regions[0]!.text).toBe("テスト");
+  });
+
   it("throws on API error", async () => {
     mockFetch.mockResolvedValueOnce({
       ok: false,
