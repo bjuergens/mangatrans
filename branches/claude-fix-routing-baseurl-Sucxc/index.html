@@ -12,15 +12,19 @@
         var query = window.location.search;
         if (query.length > 1) {
           var path = query.slice(1); // strip leading "?"
+          var restored = (window.location.pathname + path).replace(
+            /\/\//g,
+            "/",
+          );
           window.history.replaceState(
             null,
             "",
-            window.location.pathname + path + window.location.hash,
+            restored + window.location.hash,
           );
         }
       })();
     </script>
-    <script type="module" crossorigin src="/mangatrans/branches/claude-fix-routing-baseurl-Sucxc/assets/index-Dv26e3GZ.js"></script>
+    <script type="module" crossorigin src="/mangatrans/branches/claude-fix-routing-baseurl-Sucxc/assets/index-Bv9XMZXM.js"></script>
     <link rel="stylesheet" crossorigin href="/mangatrans/branches/claude-fix-routing-baseurl-Sucxc/assets/index-CErOwVps.css">
   <link rel="manifest" href="/mangatrans/branches/claude-fix-routing-baseurl-Sucxc/manifest.webmanifest"><script id="vite-plugin-pwa:register-sw" src="/mangatrans/branches/claude-fix-routing-baseurl-Sucxc/registerSW.js"></script></head>
   <body>
