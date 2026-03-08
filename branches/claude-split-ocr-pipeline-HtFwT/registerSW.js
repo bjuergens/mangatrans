@@ -1,1 +1,0 @@
-if('serviceWorker' in navigator) {window.addEventListener('load', () => {navigator.serviceWorker.register('/mangatrans/branches/claude-split-ocr-pipeline-HtFwT/sw.js', { scope: '/mangatrans/branches/claude-split-ocr-pipeline-HtFwT/' })})}
