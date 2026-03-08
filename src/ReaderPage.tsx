@@ -1,7 +1,7 @@
 import { useEffect, useState, useCallback, useRef } from "react";
 import { useParams, useNavigate, Link } from "react-router-dom";
-import { db, type TextRegion, type Analysis } from "./db";
-import { anthropic } from "./claude-api";
+import { db, type TextRegion, type Analysis, type TextDirection } from "./db";
+import { anthropic, cropImage } from "./claude-api";
 import { createNavigate } from "./router";
 import { Logger } from "./logger";
 
@@ -11,6 +11,8 @@ interface RegionWithAnalysis {
   region: TextRegion;
   analysis?: Analysis;
 }
+
+const BOX_STEP = 0.02; // 2% of page per +/- click
 
 export default function ReaderPage() {
   const { comicId, pageNumber } = useParams<{
@@ -28,13 +30,19 @@ export default function ReaderPage() {
   const [title, setTitle] = useState("");
   const [error, setError] = useState<string | null>(null);
 
-  // Scan / analysis state
+  // Pipeline state
+  const [detecting, setDetecting] = useState(false);
   const [scanning, setScanning] = useState(false);
+  const [scanProgress, setScanProgress] = useState("");
   const [analyzing, setAnalyzing] = useState(false);
   const [analyzeProgress, setAnalyzeProgress] = useState("");
   const [regions, setRegions] = useState<RegionWithAnalysis[]>([]);
+  const [detected, setDetected] = useState(false);
   const [scanned, setScanned] = useState(false);
   const [hasApiKey, setHasApiKey] = useState(false);
+
+  // Box selection & editing
+  const [selectedRegionId, setSelectedRegionId] = useState<number | null>(null);
 
   // Overlay interaction state
   // 0 = transparent (default), 1 = OCR text, 2 = translation
@@ -79,6 +87,7 @@ export default function ReaderPage() {
 
         setPageId(page.id);
         currentPageIdRef.current = page.id; // page is now current
+        setDetected(!!page.detected);
         setScanned(!!page.scanned);
 
         objectUrl = URL.createObjectURL(page.imageBlob);
@@ -118,23 +127,25 @@ export default function ReaderPage() {
   useEffect(() => {
     setRegionDisplayMode(new Map());
     setTooltip(null);
+    setSelectedRegionId(null);
   }, [pageNum]);
 
-  const handleScan = useCallback(async () => {
+  // Stage 1: Detect text region bounding boxes
+  const handleDetect = useCallback(async () => {
     if (!pageId) return;
-    const myPageId = pageId; // capture — used to detect stale callbacks after navigation
-    setScanning(true);
+    const myPageId = pageId;
+    setDetecting(true);
     setError(null);
 
     try {
       const page = await db.pages.get(myPageId);
       if (!page) {
         setError("Page not found");
-        setScanning(false);
+        setDetecting(false);
         return;
       }
 
-      const result = await anthropic.scanPage(page.imageBlob);
+      const result = await anthropic.detectRegions(page.imageBlob);
 
       // Clear old regions and analyses for this page
       const oldRegions = await db.textRegions
@@ -147,51 +158,110 @@ export default function ReaderPage() {
         await db.textRegions.where("pageId").equals(myPageId).delete();
       }
 
-      // Store new regions
+      // Store detected regions (no text yet)
       const regionIds = (await db.textRegions.bulkAdd(
         result.regions.map((r) => ({
           pageId: myPageId,
           type: r.type,
-          text: r.text,
+          text: "", // no OCR yet
           bbox: r.bbox,
+          textDirection: r.textDirection,
+          hasFurigana: r.hasFurigana,
         })),
         { allKeys: true },
       )) as number[];
 
-      // Update page with visual context and scanned flag
+      // Mark page as detected (but not scanned yet)
       await db.pages.update(myPageId, {
         visualContext: result.visualContext,
-        scanned: true,
+        detected: true,
+        scanned: false,
       });
 
-      // Guard: user may have navigated away while the scan API call was in flight.
-      // DB writes above are still valid — don't update React state for the wrong page.
       if (currentPageIdRef.current !== myPageId) return;
 
-      setScanned(true);
+      setDetected(true);
+      setScanned(false);
 
-      // Build region objects from the data we already have — no need to re-fetch
       const newRegions: RegionWithAnalysis[] = result.regions.map((r, i) => ({
         region: {
           id: regionIds[i]!,
           pageId: myPageId,
           type: r.type,
-          text: r.text,
+          text: "",
           bbox: r.bbox,
+          textDirection: r.textDirection,
+          hasFurigana: r.hasFurigana,
         },
         analysis: undefined,
       }));
       setRegions(newRegions);
       setRegionDisplayMode(new Map());
       setTooltip(null);
+      setSelectedRegionId(null);
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e);
-      log.error(`Scan failed: ${msg}`);
-      setError(`Scan failed: ${msg}`);
+      log.error(`Detection failed: ${msg}`);
+      setError(`Detection failed: ${msg}`);
     } finally {
-      setScanning(false);
+      setDetecting(false);
     }
   }, [pageId]);
+
+  // Stage 2: OCR each detected region by cropping and sending to Claude
+  const handleReadText = useCallback(async () => {
+    if (!pageId || regions.length === 0) return;
+    const myPageId = pageId;
+    setScanning(true);
+    setError(null);
+
+    try {
+      const page = await db.pages.get(myPageId);
+      if (!page) {
+        setError("Page not found");
+        setScanning(false);
+        return;
+      }
+
+      for (let i = 0; i < regions.length; i++) {
+        const entry = regions[i]!;
+        if (entry.region.text) continue; // already has OCR text
+
+        setScanProgress(`Reading region ${i + 1}/${regions.length}...`);
+
+        const cropped = await cropImage(page.imageBlob, entry.region.bbox);
+        const result = await anthropic.ocrRegion(cropped);
+
+        // Update text in DB
+        await db.textRegions.update(entry.region.id, { text: result.text });
+
+        if (currentPageIdRef.current !== myPageId) return;
+
+        // Update state
+        setRegions((prev) =>
+          prev.map((r) =>
+            r.region.id === entry.region.id
+              ? { ...r, region: { ...r.region, text: result.text } }
+              : r,
+          ),
+        );
+      }
+
+      // Mark page as scanned
+      await db.pages.update(myPageId, { scanned: true });
+
+      if (currentPageIdRef.current !== myPageId) return;
+      setScanned(true);
+      setScanProgress("");
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
+      log.error(`OCR failed: ${msg}`);
+      setError(`OCR failed: ${msg}`);
+    } finally {
+      setScanning(false);
+      setScanProgress("");
+    }
+  }, [pageId, regions]);
 
   const handleAnalyze = useCallback(async () => {
     if (!pageId || regions.length === 0) return;
@@ -278,6 +348,15 @@ export default function ReaderPage() {
     });
   }
 
+  function handleRegionClick(regionId: number) {
+    // If we're in editing mode (detected but not yet scanned), select the box
+    if (detected && !scanned) {
+      setSelectedRegionId((prev) => (prev === regionId ? null : regionId));
+    } else {
+      cycleRegionDisplay(regionId);
+    }
+  }
+
   function handleRegionMouseEnter(
     regionId: number,
     e: React.MouseEvent<HTMLDivElement>,
@@ -297,9 +376,99 @@ export default function ReaderPage() {
     );
   }
 
+  // --- Box editing helpers ---
+
+  async function updateRegionInDb(
+    regionId: number,
+    updates: Partial<TextRegion>,
+  ) {
+    await db.textRegions.update(regionId, updates);
+    setRegions((prev) =>
+      prev.map((r) =>
+        r.region.id === regionId
+          ? { ...r, region: { ...r.region, ...updates } }
+          : r,
+      ),
+    );
+  }
+
+  function adjustBbox(
+    regionId: number,
+    field: "x" | "y" | "size",
+    delta: number,
+  ) {
+    const entry = regions.find((r) => r.region.id === regionId);
+    if (!entry) return;
+    const [x, y, w, h] = entry.region.bbox;
+    let newBbox: [number, number, number, number];
+    if (field === "x") {
+      newBbox = [Math.max(0, Math.min(1 - w, x + delta)), y, w, h];
+    } else if (field === "y") {
+      newBbox = [x, Math.max(0, Math.min(1 - h, y + delta)), w, h];
+    } else {
+      // size — keep square
+      const newSize = Math.max(0.02, Math.min(1, w + delta));
+      newBbox = [x, y, newSize, newSize];
+    }
+    updateRegionInDb(regionId, { bbox: newBbox });
+  }
+
+  function setRegionDirection(regionId: number, dir: TextDirection) {
+    updateRegionInDb(regionId, { textDirection: dir });
+  }
+
+  function toggleFurigana(regionId: number) {
+    const entry = regions.find((r) => r.region.id === regionId);
+    if (!entry) return;
+    updateRegionInDb(regionId, { hasFurigana: !entry.region.hasFurigana });
+  }
+
+  function setRegionType(regionId: number, type: TextRegion["type"]) {
+    updateRegionInDb(regionId, { type });
+  }
+
+  async function deleteRegion(regionId: number) {
+    await db.analyses.where("textRegionId").equals(regionId).delete();
+    await db.textRegions.delete(regionId);
+    setRegions((prev) => prev.filter((r) => r.region.id !== regionId));
+    if (selectedRegionId === regionId) setSelectedRegionId(null);
+  }
+
+  async function addRegion() {
+    if (!pageId) return;
+    const id = (await db.textRegions.add({
+      pageId,
+      type: "dialogue",
+      text: "",
+      bbox: [0.4, 0.4, 0.15, 0.15],
+      textDirection: "ttb",
+      hasFurigana: false,
+    })) as number;
+    const newRegion: RegionWithAnalysis = {
+      region: {
+        id,
+        pageId,
+        type: "dialogue",
+        text: "",
+        bbox: [0.4, 0.4, 0.15, 0.15],
+        textDirection: "ttb",
+        hasFurigana: false,
+      },
+      analysis: undefined,
+    };
+    setRegions((prev) => [...prev, newRegion]);
+    setSelectedRegionId(id);
+  }
+
+  const busy = detecting || scanning || analyzing;
   const allAnalyzed =
     regions.length > 0 && regions.every((r) => r.analysis !== undefined);
   const someAnalyzed = regions.some((r) => r.analysis !== undefined);
+  const allHaveText =
+    regions.length > 0 && regions.every((r) => r.region.text.length > 0);
+  const selectedRegion = selectedRegionId
+    ? regions.find((r) => r.region.id === selectedRegionId)
+    : null;
 
   if (error && !imageUrl) {
     return (
@@ -341,25 +510,61 @@ export default function ReaderPage() {
       </div>
 
       {/* Action buttons */}
-      <div className="mb-3 flex items-center gap-2" data-testid="scan-controls">
+      <div
+        className="mb-3 flex flex-wrap items-center gap-2"
+        data-testid="scan-controls"
+      >
+        {/* Stage 1: Detect boxes */}
         <button
-          onClick={handleScan}
-          disabled={!hasApiKey || scanning || analyzing}
+          onClick={handleDetect}
+          disabled={!hasApiKey || busy}
           className="rounded-lg bg-blue-600 px-4 py-2 text-sm text-white hover:bg-blue-700 disabled:opacity-50"
-          data-testid="scan-page-btn"
+          data-testid="detect-boxes-btn"
         >
-          {scanning ? "Scanning..." : scanned ? "Re-scan Page" : "Scan Page"}
+          {detecting
+            ? "Detecting..."
+            : detected
+              ? "Re-detect Boxes"
+              : "Detect Boxes"}
         </button>
-        {regions.length > 0 && !allAnalyzed && (
+
+        {/* Stage 2: Read text (OCR each box) */}
+        {detected && regions.length > 0 && !allHaveText && (
+          <button
+            onClick={handleReadText}
+            disabled={!hasApiKey || busy}
+            className="rounded-lg bg-indigo-600 px-4 py-2 text-sm text-white hover:bg-indigo-700 disabled:opacity-50"
+            data-testid="read-text-btn"
+          >
+            {scanning ? scanProgress || "Reading..." : "Read Text"}
+          </button>
+        )}
+
+        {/* Stage 3: Analyze (existing) */}
+        {scanned && regions.length > 0 && !allAnalyzed && (
           <button
             onClick={handleAnalyze}
-            disabled={!hasApiKey || analyzing || scanning}
+            disabled={!hasApiKey || busy}
             className="rounded-lg bg-green-600 px-4 py-2 text-sm text-white hover:bg-green-700 disabled:opacity-50"
             data-testid="analyze-btn"
           >
             {analyzing ? analyzeProgress || "Analyzing..." : "Analyze All"}
           </button>
         )}
+
+        {/* Add box button — visible when in box-editing mode */}
+        {detected && !scanned && (
+          <button
+            onClick={addRegion}
+            disabled={busy}
+            className="rounded-lg bg-gray-600 px-3 py-2 text-sm text-white hover:bg-gray-700 disabled:opacity-50"
+            data-testid="add-box-btn"
+            title="Add a new text region"
+          >
+            + Box
+          </button>
+        )}
+
         {regions.length > 0 && (
           <span className="text-xs text-gray-500">
             {regions.length} region{regions.length !== 1 ? "s" : ""}
@@ -410,14 +615,19 @@ export default function ReaderPage() {
             {regions.map(({ region, analysis }) => {
               const [x, y, w, h] = region.bbox;
               const displayMode = regionDisplayMode.get(region.id) ?? 0;
-              const borderColor = analysis
-                ? "border-green-400"
-                : "border-yellow-400";
+              const isSelected = region.id === selectedRegionId;
+              const borderColor = isSelected
+                ? "border-blue-500"
+                : analysis
+                  ? "border-green-400"
+                  : region.text
+                    ? "border-yellow-400"
+                    : "border-orange-400";
 
               return (
                 <div
                   key={region.id}
-                  className={`absolute cursor-pointer border-2 ${borderColor} transition-colors hover:bg-black/10`}
+                  className={`absolute cursor-pointer border-2 ${borderColor} transition-colors hover:bg-black/10 ${isSelected ? "ring-2 ring-blue-300" : ""}`}
                   style={{
                     left: `${x * 100}%`,
                     top: `${y * 100}%`,
@@ -425,13 +635,13 @@ export default function ReaderPage() {
                     height: `${h * 100}%`,
                   }}
                   data-testid={`text-region-${region.id}`}
-                  onClick={() => cycleRegionDisplay(region.id)}
+                  onClick={() => handleRegionClick(region.id)}
                   onMouseEnter={(e) => handleRegionMouseEnter(region.id, e)}
                   onMouseMove={handleRegionMouseMove}
                   onMouseLeave={() => setTooltip(null)}
                 >
                   {/* State 1: OCR text */}
-                  {displayMode === 1 && (
+                  {displayMode === 1 && region.text && (
                     <div className="absolute inset-0 flex items-center justify-center overflow-hidden bg-white/90 p-1">
                       <span className="text-center text-xs leading-tight text-gray-800">
                         {region.text}
@@ -512,6 +722,160 @@ export default function ReaderPage() {
           <div className="p-12 text-gray-400">Loading page...</div>
         )}
       </div>
+
+      {/* Box editing controls — shown when a region is selected and we're in edit mode */}
+      {selectedRegion && detected && !scanned && (
+        <div
+          className="mt-3 w-full max-w-2xl rounded border border-gray-200 bg-white p-3 shadow-sm"
+          data-testid="box-editor"
+        >
+          <div className="mb-2 flex items-center justify-between">
+            <span className="text-sm font-semibold text-gray-700">
+              Edit Region #{selectedRegion.region.id}
+            </span>
+            <button
+              onClick={() => deleteRegion(selectedRegion.region.id)}
+              className="rounded bg-red-100 px-2 py-1 text-xs text-red-700 hover:bg-red-200"
+              data-testid="delete-region-btn"
+            >
+              Delete
+            </button>
+          </div>
+
+          <div className="flex flex-wrap items-center gap-4 text-xs">
+            {/* Position X */}
+            <div className="flex items-center gap-1">
+              <span className="text-gray-500">X:</span>
+              <button
+                onClick={() =>
+                  adjustBbox(selectedRegion.region.id, "x", -BOX_STEP)
+                }
+                className="rounded bg-gray-100 px-2 py-1 hover:bg-gray-200"
+                data-testid="x-minus-btn"
+              >
+                -
+              </button>
+              <span className="w-10 text-center">
+                {Math.round(selectedRegion.region.bbox[0] * 100)}%
+              </span>
+              <button
+                onClick={() =>
+                  adjustBbox(selectedRegion.region.id, "x", BOX_STEP)
+                }
+                className="rounded bg-gray-100 px-2 py-1 hover:bg-gray-200"
+                data-testid="x-plus-btn"
+              >
+                +
+              </button>
+            </div>
+
+            {/* Position Y */}
+            <div className="flex items-center gap-1">
+              <span className="text-gray-500">Y:</span>
+              <button
+                onClick={() =>
+                  adjustBbox(selectedRegion.region.id, "y", -BOX_STEP)
+                }
+                className="rounded bg-gray-100 px-2 py-1 hover:bg-gray-200"
+                data-testid="y-minus-btn"
+              >
+                -
+              </button>
+              <span className="w-10 text-center">
+                {Math.round(selectedRegion.region.bbox[1] * 100)}%
+              </span>
+              <button
+                onClick={() =>
+                  adjustBbox(selectedRegion.region.id, "y", BOX_STEP)
+                }
+                className="rounded bg-gray-100 px-2 py-1 hover:bg-gray-200"
+                data-testid="y-plus-btn"
+              >
+                +
+              </button>
+            </div>
+
+            {/* Size */}
+            <div className="flex items-center gap-1">
+              <span className="text-gray-500">Size:</span>
+              <button
+                onClick={() =>
+                  adjustBbox(selectedRegion.region.id, "size", -BOX_STEP)
+                }
+                className="rounded bg-gray-100 px-2 py-1 hover:bg-gray-200"
+                data-testid="size-minus-btn"
+              >
+                -
+              </button>
+              <span className="w-10 text-center">
+                {Math.round(selectedRegion.region.bbox[2] * 100)}%
+              </span>
+              <button
+                onClick={() =>
+                  adjustBbox(selectedRegion.region.id, "size", BOX_STEP)
+                }
+                className="rounded bg-gray-100 px-2 py-1 hover:bg-gray-200"
+                data-testid="size-plus-btn"
+              >
+                +
+              </button>
+            </div>
+
+            {/* Text Direction */}
+            <div className="flex items-center gap-1">
+              <span className="text-gray-500">Dir:</span>
+              {(["ttb", "rtl", "ltr"] as TextDirection[]).map((dir) => (
+                <button
+                  key={dir}
+                  onClick={() =>
+                    setRegionDirection(selectedRegion.region.id, dir)
+                  }
+                  className={`rounded px-2 py-1 ${
+                    selectedRegion.region.textDirection === dir
+                      ? "bg-blue-600 text-white"
+                      : "bg-gray-100 hover:bg-gray-200"
+                  }`}
+                  data-testid={`dir-${dir}-btn`}
+                >
+                  {dir.toUpperCase()}
+                </button>
+              ))}
+            </div>
+
+            {/* Furigana toggle */}
+            <button
+              onClick={() => toggleFurigana(selectedRegion.region.id)}
+              className={`rounded px-2 py-1 ${
+                selectedRegion.region.hasFurigana
+                  ? "bg-purple-600 text-white"
+                  : "bg-gray-100 hover:bg-gray-200"
+              }`}
+              data-testid="furigana-toggle-btn"
+            >
+              Furigana
+            </button>
+
+            {/* Region type */}
+            <div className="flex items-center gap-1">
+              <span className="text-gray-500">Type:</span>
+              {(["dialogue", "narration", "sfx"] as const).map((t) => (
+                <button
+                  key={t}
+                  onClick={() => setRegionType(selectedRegion.region.id, t)}
+                  className={`rounded px-2 py-1 ${
+                    selectedRegion.region.type === t
+                      ? "bg-green-600 text-white"
+                      : "bg-gray-100 hover:bg-gray-200"
+                  }`}
+                  data-testid={`type-${t}-btn`}
+                >
+                  {t}
+                </button>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Navigation */}
       <div className="mt-4 flex items-center gap-4">
