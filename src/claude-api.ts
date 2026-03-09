@@ -81,8 +81,8 @@ export interface TextAnalysisResult {
   rawResponse: string;
 }
 
-/** Convert a Blob to a base64 data string for the Claude vision API. */
-async function blobToBase64(blob: Blob): Promise<string> {
+/** Convert a Blob to a base64 data string. */
+export async function blobToBase64(blob: Blob): Promise<string> {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
     reader.onloadend = () => {
