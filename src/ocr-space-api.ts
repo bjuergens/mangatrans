@@ -1,5 +1,6 @@
 import { Logger } from "./logger";
 import { db } from "./db";
+import { blobToDataUri, getImageDimensions } from "./image-utils";
 
 const log = new Logger("OcrSpaceApi");
 
@@ -82,16 +83,6 @@ async function getSettings(): Promise<OcrSpaceSettings> {
   };
 }
 
-/** Convert a Blob to a base64 data URI (data:image/...;base64,...) for OCR.space. */
-async function blobToDataUri(blob: Blob): Promise<string> {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onloadend = () => resolve(reader.result as string);
-    reader.onerror = () => reject(new Error("Failed to read blob as data URI"));
-    reader.readAsDataURL(blob);
-  });
-}
-
 /** Compute bounding box for a line from its words, as fractions of page dimensions. */
 function lineBbox(
   words: OcrWord[],
@@ -114,25 +105,6 @@ function lineBbox(
     (maxX - minX) / pageWidth,
     (maxY - minY) / pageHeight,
   ];
-}
-
-/** Get image dimensions from a Blob. */
-function getImageDimensions(
-  blob: Blob,
-): Promise<{ width: number; height: number }> {
-  return new Promise((resolve, reject) => {
-    const img = new Image();
-    const url = URL.createObjectURL(blob);
-    img.onload = () => {
-      URL.revokeObjectURL(url);
-      resolve({ width: img.naturalWidth, height: img.naturalHeight });
-    };
-    img.onerror = () => {
-      URL.revokeObjectURL(url);
-      reject(new Error("Failed to load image for dimensions"));
-    };
-    img.src = url;
-  });
 }
 
 export async function ocrPage(imageBlob: Blob): Promise<OcrSpacePageResult> {

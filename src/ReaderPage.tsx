@@ -1,7 +1,8 @@
 import { useEffect, useState, useCallback, useRef } from "react";
 import { useParams, useNavigate, Link } from "react-router-dom";
 import { db, type TextRegion, type Analysis } from "./db";
-import { anthropic, cropImage } from "./claude-api";
+import { anthropic } from "./claude-api";
+import { cropImage } from "./image-utils";
 import { ocrPage } from "./ocr-space-api";
 import { createNavigate } from "./router";
 import { Logger } from "./logger";
