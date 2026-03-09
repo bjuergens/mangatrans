@@ -85,6 +85,8 @@ Use emoji in commit messages, log output, and code comments for visual scanning.
 | 🌐    | Network / API / online             |
 | 💾    | Storage / persistence              |
 | 🎯    | Core goal / MVP                    |
+| 📤    | Outgoing request                   |
+| 📥    | Incoming response                  |
 
 ## Code Style
 
@@ -106,11 +108,35 @@ Keep it flat until it hurts. Don't create `utils/`, `helpers/`, `common/`, or `s
 - E2E tests capture browser console output to text files for debugging.
 - Tests should not require network or API keys. Mock external calls.
 
-## AI API Calls
+## External API Clients
 
-- All AI calls go through the user's own API key stored in IndexedDB.
-- Never hardcode API keys or include them in source.
-- API calls happen only when the user explicitly triggers analysis.
+All external API integrations (Anthropic, OCR.space, future providers) follow the same structure. See `claude-api.ts` and `ocr-space-api.ts` as reference implementations.
+
+**Class structure:**
+
+- One class per provider (e.g. `AnthropicClient`, `OcrSpaceClient`).
+- Export a singleton instance: `export const anthropic = new AnthropicClient()`.
+- Private `getApiKey()` method reads from `db.settings`. Throws if not configured.
+- Private `request()` method — single point for all HTTP calls. Handles logging, error formatting.
+- Public methods for each API operation (`detectRegions`, `ocrPage`, `testApiKey`, etc.).
+
+**Logging:**
+
+- Instance-level `Logger`: `private log = new Logger("ClassName")`.
+- Use emoji prefixes consistently: `🌐` request start, `📤` request detail, `✅` success, `❌` error, `📥` response, `🔍` result summary.
+- Censor API keys in logs (show prefix + last 4 chars).
+- Truncate long response bodies in debug output.
+
+**API keys & settings:**
+
+- All API keys stored in IndexedDB via `db.settings`, never hardcoded.
+- `testApiKey()` reads the saved key from DB (no parameters) — keeps the interface consistent.
+- Provider-specific settings (engine, language, model) also stored in `db.settings`.
+- API calls happen only when the user explicitly triggers an action.
+
+**Shared utilities:**
+
+- Image helpers (`blobToBase64`, `blobToDataUri`, `getImageDimensions`, `mediaType`, `cropImage`) live in `image-utils.ts`. Don't duplicate these in API client files.
 
 ## Git
 
