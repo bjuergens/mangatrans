@@ -3,7 +3,7 @@ import { useParams, useNavigate, Link } from "react-router-dom";
 import { db, type TextRegion, type Analysis } from "./db";
 import { anthropic } from "./claude-api";
 import { cropImage } from "./image-utils";
-import { ocrPage } from "./ocr-space-api";
+import { ocrSpace } from "./ocr-space-api";
 import { createNavigate } from "./router";
 import { Logger } from "./logger";
 
@@ -170,7 +170,7 @@ export default function ReaderPage() {
 
       if (ocrProvider === "ocr-space") {
         // OCR.space: detection + OCR in one call
-        const result = await ocrPage(page.imageBlob);
+        const result = await ocrSpace.ocrPage(page.imageBlob);
 
         const regionIds = (await db.textRegions.bulkAdd(
           result.regions.map((r) => ({

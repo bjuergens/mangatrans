@@ -1,10 +1,7 @@
 import { useState, useEffect } from "react";
 import { db } from "./db";
 import { anthropic, type ModelInfo } from "./claude-api";
-import {
-  testApiKey as testOcrSpaceApiKey,
-  type OcrSpaceTestResult,
-} from "./ocr-space-api";
+import { ocrSpace, type OcrSpaceTestResult } from "./ocr-space-api";
 import { redirectToAppRoot, assetUrl } from "./router";
 
 type TextExtractionBackend = "ai-vision" | "local-ocr";
@@ -140,7 +137,7 @@ export default function SettingsPage() {
   async function handleTestOcrSpaceApiKey() {
     setTestingOcrSpace(true);
     setOcrSpaceTestResult(null);
-    const result = await testOcrSpaceApiKey(savedOcrSpaceApiKey);
+    const result = await ocrSpace.testApiKey();
     setOcrSpaceTestResult(result);
     setTestingOcrSpace(false);
   }

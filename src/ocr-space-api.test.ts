@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
-import { ocrPage, testApiKey } from "./ocr-space-api";
+import { ocrSpace } from "./ocr-space-api";
 import { db } from "./db";
 
 const mockFetch = vi.fn();
@@ -106,7 +106,7 @@ describe("ocrPage", () => {
     });
 
     const blob = new Blob(["fake-image"], { type: "image/png" });
-    const result = await ocrPage(blob);
+    const result = await ocrSpace.ocrPage(blob);
 
     expect(result.regions).toHaveLength(2);
     expect(result.regions[0]!.text).toBe("こんにちは");
@@ -145,7 +145,7 @@ describe("ocrPage", () => {
     });
 
     const blob = new Blob(["fake"], { type: "image/png" });
-    await expect(ocrPage(blob)).rejects.toThrow(
+    await expect(ocrSpace.ocrPage(blob)).rejects.toThrow(
       "OCR.space API error: 403 Forbidden",
     );
   });
@@ -171,13 +171,15 @@ describe("ocrPage", () => {
     });
 
     const blob = new Blob(["fake"], { type: "image/png" });
-    await expect(ocrPage(blob)).rejects.toThrow("OCR.space processing error");
+    await expect(ocrSpace.ocrPage(blob)).rejects.toThrow(
+      "OCR.space processing error",
+    );
   });
 
   it("throws when no API key configured", async () => {
     await db.settings.delete("ocrSpaceApiKey");
     const blob = new Blob(["fake"], { type: "image/png" });
-    await expect(ocrPage(blob)).rejects.toThrow(
+    await expect(ocrSpace.ocrPage(blob)).rejects.toThrow(
       "No OCR.space API key configured",
     );
   });
@@ -190,7 +192,7 @@ describe("ocrPage", () => {
     });
 
     const blob = new Blob(["fake"], { type: "image/png" });
-    const result = await ocrPage(blob);
+    const result = await ocrSpace.ocrPage(blob);
     expect(result.regions).toHaveLength(0);
   });
 
@@ -205,7 +207,7 @@ describe("ocrPage", () => {
     });
 
     const blob = new Blob(["fake"], { type: "image/png" });
-    await ocrPage(blob);
+    await ocrSpace.ocrPage(blob);
 
     const callArgs = mockFetch.mock.calls[0]!;
     const formData = callArgs[1].body as FormData;
@@ -234,7 +236,7 @@ describe("testApiKey", () => {
       }),
     });
 
-    const result = await testApiKey("valid-key");
+    const result = await ocrSpace.testApiKey();
     expect(result.valid).toBe(true);
   });
 
@@ -245,7 +247,7 @@ describe("testApiKey", () => {
       statusText: "Unauthorized",
     });
 
-    const result = await testApiKey("bad-key");
+    const result = await ocrSpace.testApiKey();
     expect(result.valid).toBe(false);
     expect(result.error).toContain("401");
   });
@@ -253,7 +255,7 @@ describe("testApiKey", () => {
   it("returns valid=false on network error", async () => {
     mockFetch.mockRejectedValueOnce(new Error("Network error"));
 
-    const result = await testApiKey("any-key");
+    const result = await ocrSpace.testApiKey();
     expect(result.valid).toBe(false);
     expect(result.error).toContain("Network error");
   });
@@ -270,7 +272,7 @@ describe("testApiKey", () => {
       }),
     });
 
-    const result = await testApiKey("invalid-key");
+    const result = await ocrSpace.testApiKey();
     expect(result.valid).toBe(false);
     expect(result.error).toContain("Invalid key");
   });
