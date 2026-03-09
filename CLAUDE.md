@@ -85,6 +85,8 @@ Use emoji in commit messages, log output, and code comments for visual scanning.
 | 🌐    | Network / API / online             |
 | 💾    | Storage / persistence              |
 | 🎯    | Core goal / MVP                    |
+| 📤    | Outgoing request                   |
+| 📥    | Incoming response                  |
 
 ## Code Style
 
@@ -94,6 +96,24 @@ Use emoji in commit messages, log output, and code comments for visual scanning.
 - No dead code. No commented-out code. No TODO comments without a linked issue.
 - Error messages should include enough context to debug without a debugger.
 - **Async: Promises only.** All async code uses `async`/`await`. No event emitters, no observables, no polling, no callback patterns. If a library uses a different paradigm, wrap it in a Promise at the integration boundary.
+
+### Module Patterns
+
+**Class exports — singleton vs constructor:**
+
+- Stateless service wrappers (e.g. API clients) export a singleton: `export const anthropic = new AnthropicClient()`. This works when all state lives externally (IndexedDB, server-side).
+- Classes that need per-use configuration export the constructor: `export class Logger { constructor(private readonly context: string) {} }`. Callers instantiate with `new Logger("MyModule")`.
+
+**Logging:**
+
+- Use `Logger` from `logger.ts`. Instantiate with a context string matching the module or class name: `new Logger("ReaderPage")`, `new Logger("AnthropicClient")`.
+- In classes, use an instance field: `private log = new Logger("ClassName")`.
+- Use emoji prefixes consistently: `🌐` request start, `📤` request detail, `✅` success, `❌` error, `📥` response, `🔍` result summary.
+- Censor secrets in logs (show prefix + last 4 chars). Truncate long payloads in debug output.
+
+**Shared utilities:**
+
+- Image helpers (`blobToBase64`, `blobToDataUri`, `getImageDimensions`, `mediaType`, `cropImage`) live in `image-utils.ts`. Don't duplicate these across modules.
 
 ## File Structure
 
@@ -106,11 +126,17 @@ Keep it flat until it hurts. Don't create `utils/`, `helpers/`, `common/`, or `s
 - E2E tests capture browser console output to text files for debugging.
 - Tests should not require network or API keys. Mock external calls.
 
-## AI API Calls
+## External API Clients
 
-- All AI calls go through the user's own API key stored in IndexedDB.
-- Never hardcode API keys or include them in source.
-- API calls happen only when the user explicitly triggers analysis.
+All external API integrations (Anthropic, OCR.space, future providers) follow the same structure. See `claude-api.ts` and `ocr-space-api.ts` as reference implementations. General class patterns (singletons, logging, shared utilities) are documented under Code Style → Module Patterns.
+
+- One class per provider (e.g. `AnthropicClient`, `OcrSpaceClient`), exported as a singleton.
+- Private `getApiKey()` method reads from `db.settings`. Throws if not configured.
+- Private `request()` method — single point for all HTTP calls. Handles logging, error formatting.
+- Public methods for each API operation (`detectRegions`, `ocrPage`, `testApiKey`, etc.).
+- `testApiKey()` reads the saved key from DB (no parameters) — keeps the interface consistent.
+- All API keys and provider-specific settings (engine, language, model) stored in `db.settings`, never hardcoded.
+- API calls happen only when the user explicitly triggers an action.
 
 ## Git
 

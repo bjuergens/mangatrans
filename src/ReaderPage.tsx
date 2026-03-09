@@ -1,9 +1,13 @@
 import { useEffect, useState, useCallback, useRef } from "react";
 import { useParams, useNavigate, Link } from "react-router-dom";
 import { db, type TextRegion, type Analysis } from "./db";
-import { anthropic, cropImage } from "./claude-api";
+import { anthropic } from "./claude-api";
+import { cropImage } from "./image-utils";
+import { ocrSpace } from "./ocr-space-api";
 import { createNavigate } from "./router";
 import { Logger } from "./logger";
+
+type OcrProvider = "claude" | "ocr-space";
 
 const log = new Logger("ReaderPage");
 
@@ -40,6 +44,8 @@ export default function ReaderPage() {
   const [detected, setDetected] = useState(false);
   const [scanned, setScanned] = useState(false);
   const [hasApiKey, setHasApiKey] = useState(false);
+  const [hasOcrSpaceKey, setHasOcrSpaceKey] = useState(false);
+  const [ocrProvider, setOcrProvider] = useState<OcrProvider>("claude");
 
   // Box selection & editing
   const [selectedRegionId, setSelectedRegionId] = useState<number | null>(null);
@@ -93,9 +99,13 @@ export default function ReaderPage() {
         objectUrl = URL.createObjectURL(page.imageBlob);
         setImageUrl(objectUrl);
 
-        // Check for API key
-        const apiKeySetting = await db.settings.get("apiKey");
+        // Check for API keys
+        const [apiKeySetting, ocrSpaceKeySetting] = await Promise.all([
+          db.settings.get("apiKey"),
+          db.settings.get("ocrSpaceApiKey"),
+        ]);
         setHasApiKey(!!apiKeySetting?.value);
+        setHasOcrSpaceKey(!!ocrSpaceKeySetting?.value);
 
         // Load existing text regions and analyses
         const existingRegions = await db.textRegions
@@ -130,7 +140,7 @@ export default function ReaderPage() {
     setSelectedRegionId(null);
   }, [pageNum]);
 
-  // Stage 1: Detect text region bounding boxes
+  // Stage 1: Detect text region bounding boxes (Claude or OCR.space)
   const handleDetect = useCallback(async () => {
     if (!pageId) return;
     const myPageId = pageId;
@@ -145,8 +155,6 @@ export default function ReaderPage() {
         return;
       }
 
-      const result = await anthropic.detectRegions(page.imageBlob);
-
       // Clear old regions and analyses for this page
       const oldRegions = await db.textRegions
         .where("pageId")
@@ -158,43 +166,89 @@ export default function ReaderPage() {
         await db.textRegions.where("pageId").equals(myPageId).delete();
       }
 
-      // Store detected regions (no text yet)
-      const regionIds = (await db.textRegions.bulkAdd(
-        result.regions.map((r) => ({
-          pageId: myPageId,
-          type: r.type,
-          text: "", // no OCR yet
-          bbox: r.bbox,
-          textDirection: r.textDirection,
-          hasFurigana: r.hasFurigana,
-        })),
-        { allKeys: true },
-      )) as number[];
+      let newRegions: RegionWithAnalysis[];
 
-      // Mark page as detected (but not scanned yet)
-      await db.pages.update(myPageId, {
-        visualContext: result.visualContext,
-        detected: true,
-        scanned: false,
-      });
+      if (ocrProvider === "ocr-space") {
+        // OCR.space: detection + OCR in one call
+        const result = await ocrSpace.ocrPage(page.imageBlob);
 
-      if (currentPageIdRef.current !== myPageId) return;
+        const regionIds = (await db.textRegions.bulkAdd(
+          result.regions.map((r) => ({
+            pageId: myPageId,
+            type: "dialogue" as const,
+            text: r.text,
+            bbox: r.bbox,
+            textDirection: "ttb" as const,
+            hasFurigana: false,
+          })),
+          { allKeys: true },
+        )) as number[];
 
-      setDetected(true);
-      setScanned(false);
+        // OCR.space does detection + OCR in one shot
+        await db.pages.update(myPageId, {
+          visualContext: "Page scanned via OCR.space",
+          detected: true,
+          scanned: true,
+        });
 
-      const newRegions: RegionWithAnalysis[] = result.regions.map((r, i) => ({
-        region: {
-          id: regionIds[i]!,
-          pageId: myPageId,
-          type: r.type,
-          text: "",
-          bbox: r.bbox,
-          textDirection: r.textDirection,
-          hasFurigana: r.hasFurigana,
-        },
-        analysis: undefined,
-      }));
+        if (currentPageIdRef.current !== myPageId) return;
+
+        setDetected(true);
+        setScanned(true);
+
+        newRegions = result.regions.map((r, i) => ({
+          region: {
+            id: regionIds[i]!,
+            pageId: myPageId,
+            type: "dialogue" as const,
+            text: r.text,
+            bbox: r.bbox,
+            textDirection: "ttb" as const,
+            hasFurigana: false,
+          },
+          analysis: undefined,
+        }));
+      } else {
+        // Claude: detection only (OCR is a separate step)
+        const result = await anthropic.detectRegions(page.imageBlob);
+
+        const regionIds = (await db.textRegions.bulkAdd(
+          result.regions.map((r) => ({
+            pageId: myPageId,
+            type: r.type,
+            text: "",
+            bbox: r.bbox,
+            textDirection: r.textDirection,
+            hasFurigana: r.hasFurigana,
+          })),
+          { allKeys: true },
+        )) as number[];
+
+        await db.pages.update(myPageId, {
+          visualContext: result.visualContext,
+          detected: true,
+          scanned: false,
+        });
+
+        if (currentPageIdRef.current !== myPageId) return;
+
+        setDetected(true);
+        setScanned(false);
+
+        newRegions = result.regions.map((r, i) => ({
+          region: {
+            id: regionIds[i]!,
+            pageId: myPageId,
+            type: r.type,
+            text: "",
+            bbox: r.bbox,
+            textDirection: r.textDirection,
+            hasFurigana: r.hasFurigana,
+          },
+          analysis: undefined,
+        }));
+      }
+
       setRegions(newRegions);
       setRegionDisplayMode(new Map());
       setTooltip(null);
@@ -206,7 +260,7 @@ export default function ReaderPage() {
     } finally {
       setDetecting(false);
     }
-  }, [pageId]);
+  }, [pageId, ocrProvider]);
 
   // Stage 2: OCR each detected region by cropping and sending to Claude
   const handleReadText = useCallback(async () => {
@@ -457,6 +511,8 @@ export default function ReaderPage() {
   }
 
   const busy = detecting || scanning || analyzing;
+  const canDetect = ocrProvider === "claude" ? hasApiKey : hasOcrSpaceKey;
+  const hasBothKeys = hasApiKey && hasOcrSpaceKey;
   const allAnalyzed =
     regions.length > 0 && regions.every((r) => r.analysis !== undefined);
   const someAnalyzed = regions.some((r) => r.analysis !== undefined);
@@ -513,7 +569,7 @@ export default function ReaderPage() {
         {/* Stage 1: Detect boxes */}
         <button
           onClick={handleDetect}
-          disabled={!hasApiKey || busy}
+          disabled={!canDetect || busy}
           className="rounded-lg bg-blue-600 px-4 py-2 text-sm text-white hover:bg-blue-700 disabled:opacity-50"
           data-testid="detect-boxes-btn"
         >
@@ -523,6 +579,37 @@ export default function ReaderPage() {
               ? "Re-detect Boxes"
               : "Detect Boxes"}
         </button>
+
+        {/* OCR provider toggle — visible when both keys are configured */}
+        {hasBothKeys && (
+          <div
+            className="flex items-center gap-3 text-sm"
+            data-testid="ocr-provider-toggle"
+          >
+            <label className="flex items-center gap-1 cursor-pointer">
+              <input
+                type="radio"
+                name="ocrProvider"
+                value="claude"
+                checked={ocrProvider === "claude"}
+                onChange={() => setOcrProvider("claude")}
+                disabled={busy}
+              />
+              <span>Claude</span>
+            </label>
+            <label className="flex items-center gap-1 cursor-pointer">
+              <input
+                type="radio"
+                name="ocrProvider"
+                value="ocr-space"
+                checked={ocrProvider === "ocr-space"}
+                onChange={() => setOcrProvider("ocr-space")}
+                disabled={busy}
+              />
+              <span>OCR.space</span>
+            </label>
+          </div>
+        )}
 
         {/* Stage 2: Read text (OCR each box) */}
         {detected && regions.length > 0 && !allHaveText && (
@@ -571,12 +658,12 @@ export default function ReaderPage() {
       </div>
 
       {/* No API key info */}
-      {!hasApiKey && (
+      {!hasApiKey && !hasOcrSpaceKey && (
         <div
           className="mb-3 w-full max-w-2xl rounded border border-blue-200 bg-blue-50 px-4 py-2 text-sm text-blue-700"
           data-testid="no-api-key-info"
         >
-          Add your Claude API key in{" "}
+          Add your Claude API key or OCR.space API key in{" "}
           <Link to="/settings" className="underline hover:text-blue-900">
             Settings
           </Link>{" "}

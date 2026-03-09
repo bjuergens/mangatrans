@@ -6,6 +6,7 @@ import {
   type VocabEntry,
   type GrammarPoint,
 } from "./db";
+import { blobToBase64, mediaType } from "./image-utils";
 
 const API_BASE = "https://api.anthropic.com/v1";
 const API_VERSION = "2023-06-01";
@@ -79,51 +80,6 @@ export interface TextAnalysisResult {
   grammar: GrammarPoint[];
   suggestedTranslation: string;
   rawResponse: string;
-}
-
-/** Convert a Blob to a base64 data string for the Claude vision API. */
-async function blobToBase64(blob: Blob): Promise<string> {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onloadend = () => {
-      const dataUrl = reader.result as string;
-      const base64 = dataUrl.split(",")[1] ?? "";
-      resolve(base64);
-    };
-    reader.onerror = () => reject(new Error("Failed to read blob as base64"));
-    reader.readAsDataURL(blob);
-  });
-}
-
-function mediaType(
-  blob: Blob,
-): "image/jpeg" | "image/png" | "image/gif" | "image/webp" {
-  const t = blob.type;
-  if (t === "image/png") return "image/png";
-  if (t === "image/gif") return "image/gif";
-  if (t === "image/webp") return "image/webp";
-  return "image/jpeg";
-}
-
-/**
- * Crop a region from an image blob using Canvas.
- * bbox is [x, y, width, height] as fractions of image dimensions (0-1).
- */
-export async function cropImage(
-  imageBlob: Blob,
-  bbox: [number, number, number, number],
-): Promise<Blob> {
-  const img = await createImageBitmap(imageBlob);
-  const [fx, fy, fw, fh] = bbox;
-  const sx = Math.round(fx * img.width);
-  const sy = Math.round(fy * img.height);
-  const sw = Math.round(fw * img.width);
-  const sh = Math.round(fh * img.height);
-
-  const canvas = new OffscreenCanvas(sw, sh);
-  const ctx = canvas.getContext("2d")!;
-  ctx.drawImage(img, sx, sy, sw, sh, 0, 0, sw, sh);
-  return canvas.convertToBlob({ type: "image/png" });
 }
 
 export class AnthropicClient {

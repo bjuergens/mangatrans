@@ -114,6 +114,76 @@ describe("SettingsPage", () => {
     expect(link).toHaveAttribute("target", "_blank");
   });
 
+  it("saves OCR.space API key to IndexedDB", async () => {
+    renderSettings();
+    const user = userEvent.setup();
+
+    const input = await screen.findByTestId("ocr-space-api-key-input");
+    await user.type(input, "ocr-test-key-123");
+    await user.click(screen.getByTestId("save-ocr-space-api-key"));
+
+    await waitFor(async () => {
+      const setting = await db.settings.get("ocrSpaceApiKey");
+      expect(setting?.value).toBe("ocr-test-key-123");
+    });
+  });
+
+  it("loads saved OCR.space API key and shows settings", async () => {
+    await db.settings.put({ key: "ocrSpaceApiKey", value: "ocr-existing-key" });
+    renderSettings();
+
+    await waitFor(() => {
+      expect(
+        screen.getAllByText("API key saved").length,
+      ).toBeGreaterThanOrEqual(1);
+    });
+    // Engine and language options should be visible when key is saved
+    expect(screen.getByText("OCR Engine")).toBeInTheDocument();
+    expect(screen.getByTestId("ocr-space-language-select")).toBeInTheDocument();
+  });
+
+  it("clears OCR.space API key", async () => {
+    await db.settings.put({ key: "ocrSpaceApiKey", value: "ocr-to-clear" });
+    renderSettings();
+    const user = userEvent.setup();
+
+    const clearButton = await screen.findByTestId("clear-ocr-space-api-key");
+    await user.click(clearButton);
+
+    await waitFor(async () => {
+      const setting = await db.settings.get("ocrSpaceApiKey");
+      expect(setting).toBeUndefined();
+    });
+  });
+
+  it("saves OCR.space engine preference", async () => {
+    await db.settings.put({ key: "ocrSpaceApiKey", value: "ocr-key" });
+    renderSettings();
+    const user = userEvent.setup();
+
+    const engine1 = await screen.findByLabelText(/Engine 1/);
+    await user.click(engine1);
+
+    await waitFor(async () => {
+      const setting = await db.settings.get("ocrSpaceEngine");
+      expect(setting?.value).toBe("1");
+    });
+  });
+
+  it("saves OCR.space language preference", async () => {
+    await db.settings.put({ key: "ocrSpaceApiKey", value: "ocr-key" });
+    renderSettings();
+    const user = userEvent.setup();
+
+    const select = await screen.findByTestId("ocr-space-language-select");
+    await user.selectOptions(select, "kor");
+
+    await waitFor(async () => {
+      const setting = await db.settings.get("ocrSpaceLanguage");
+      expect(setting?.value).toBe("kor");
+    });
+  });
+
   it("shows reset button", async () => {
     renderSettings();
     const button = await screen.findByTestId("reset-app");
