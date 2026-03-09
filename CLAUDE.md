@@ -115,14 +115,15 @@ All external API integrations (Anthropic, OCR.space, future providers) follow th
 **Class structure:**
 
 - One class per provider (e.g. `AnthropicClient`, `OcrSpaceClient`).
-- Export a singleton instance: `export const anthropic = new AnthropicClient()`.
+- API clients are singletons — one instance per provider, exported as `export const anthropic = new AnthropicClient()`. This works because they're stateless wrappers around an external service (all state lives in IndexedDB). Don't default to singletons elsewhere — classes like `Logger` that need per-use configuration should export the constructor.
 - Private `getApiKey()` method reads from `db.settings`. Throws if not configured.
 - Private `request()` method — single point for all HTTP calls. Handles logging, error formatting.
 - Public methods for each API operation (`detectRegions`, `ocrPage`, `testApiKey`, etc.).
 
 **Logging:**
 
-- Instance-level `Logger`: `private log = new Logger("ClassName")`.
+- Use `Logger` from `logger.ts`. Instantiate with a context string: `new Logger("ReaderPage")`, `new Logger("AnthropicClient")`.
+- In API client classes, use an instance field: `private log = new Logger("ClassName")`.
 - Use emoji prefixes consistently: `🌐` request start, `📤` request detail, `✅` success, `❌` error, `📥` response, `🔍` result summary.
 - Censor API keys in logs (show prefix + last 4 chars).
 - Truncate long response bodies in debug output.
