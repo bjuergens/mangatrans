@@ -1,0 +1,1 @@
+if('serviceWorker' in navigator) {window.addEventListener('load', () => {navigator.serviceWorker.register('/mangatrans/branches/claude-add-ocr-space-integration-4xFk5/sw.js', { scope: '/mangatrans/branches/claude-add-ocr-space-integration-4xFk5/' })})}
