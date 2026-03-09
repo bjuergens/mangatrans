@@ -70,12 +70,29 @@ describe("SettingsPage", () => {
     renderSettings();
     const user = userEvent.setup();
 
-    const localOcr = await screen.findByLabelText(/Local OCR/);
-    await user.click(localOcr);
+    const paddleOcr = await screen.findByLabelText(/PaddleOCR/);
+    await user.click(paddleOcr);
 
     await waitFor(async () => {
       const setting = await db.settings.get("textExtractionBackend");
-      expect(setting?.value).toBe("local-ocr");
+      expect(setting?.value).toBe("paddle-ocr");
+    });
+  });
+
+  it("shows PaddleOCR URL input when PaddleOCR is selected", async () => {
+    renderSettings();
+    const user = userEvent.setup();
+
+    // URL input should not be visible initially (ai-vision is default)
+    expect(
+      screen.queryByTestId("paddle-ocr-url-input"),
+    ).not.toBeInTheDocument();
+
+    const paddleOcr = await screen.findByLabelText(/PaddleOCR/);
+    await user.click(paddleOcr);
+
+    await waitFor(() => {
+      expect(screen.getByTestId("paddle-ocr-url-input")).toBeInTheDocument();
     });
   });
 

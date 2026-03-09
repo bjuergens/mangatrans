@@ -108,7 +108,7 @@ test("settings page shows text extraction options", async ({ page }) => {
   await page.goto("/settings");
   await expect(page.getByText("Text Extraction")).toBeVisible();
   await expect(page.getByText("AI Vision")).toBeVisible();
-  await expect(page.getByText("Local OCR")).toBeVisible();
+  await expect(page.getByText("PaddleOCR", { exact: true })).toBeVisible();
 });
 
 test("settings page shows analysis detail options", async ({ page }) => {

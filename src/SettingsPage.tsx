@@ -3,7 +3,7 @@ import { db } from "./db";
 import { anthropic, type ModelInfo } from "./claude-api";
 import { redirectToAppRoot, assetUrl } from "./router";
 
-type TextExtractionBackend = "ai-vision" | "local-ocr";
+type TextExtractionBackend = "ai-vision" | "paddle-ocr";
 type AnalysisDetailLevel = "basic" | "detailed";
 
 function timeAgo(iso: string): string {
@@ -24,6 +24,8 @@ export default function SettingsPage() {
     useState<TextExtractionBackend>("ai-vision");
   const [analysisDetail, setAnalysisDetail] =
     useState<AnalysisDetailLevel>("detailed");
+  const [paddleOcrUrl, setPaddleOcrUrl] = useState("http://localhost:8866");
+  const [savedPaddleOcrUrl, setSavedPaddleOcrUrl] = useState("");
   const [saving, setSaving] = useState(false);
   const [loaded, setLoaded] = useState(false);
   const [resetting, setResetting] = useState(false);
@@ -36,12 +38,17 @@ export default function SettingsPage() {
 
   useEffect(() => {
     async function load() {
-      const [apiKeySetting, extractionSetting, detailSetting] =
-        await Promise.all([
-          db.settings.get("apiKey"),
-          db.settings.get("textExtractionBackend"),
-          db.settings.get("analysisDetailLevel"),
-        ]);
+      const [
+        apiKeySetting,
+        extractionSetting,
+        detailSetting,
+        paddleUrlSetting,
+      ] = await Promise.all([
+        db.settings.get("apiKey"),
+        db.settings.get("textExtractionBackend"),
+        db.settings.get("analysisDetailLevel"),
+        db.settings.get("paddleOcrUrl"),
+      ]);
       if (apiKeySetting) {
         setApiKey(apiKeySetting.value);
         setSavedApiKey(apiKeySetting.value);
@@ -51,6 +58,10 @@ export default function SettingsPage() {
       }
       if (detailSetting) {
         setAnalysisDetail(detailSetting.value as AnalysisDetailLevel);
+      }
+      if (paddleUrlSetting) {
+        setPaddleOcrUrl(paddleUrlSetting.value);
+        setSavedPaddleOcrUrl(paddleUrlSetting.value);
       }
       setLoaded(true);
     }
@@ -77,6 +88,12 @@ export default function SettingsPage() {
     const result = await anthropic.testApiKey();
     setTestResult(result);
     setTesting(false);
+  }
+
+  async function savePaddleOcrUrl() {
+    const trimmed = paddleOcrUrl.trim();
+    await db.settings.put({ key: "paddleOcrUrl", value: trimmed });
+    setSavedPaddleOcrUrl(trimmed);
   }
 
   async function saveTextExtraction(value: TextExtractionBackend) {
@@ -228,18 +245,46 @@ export default function SettingsPage() {
             <input
               type="radio"
               name="textExtraction"
-              value="local-ocr"
-              checked={textExtraction === "local-ocr"}
-              onChange={() => saveTextExtraction("local-ocr")}
+              value="paddle-ocr"
+              checked={textExtraction === "paddle-ocr"}
+              onChange={() => saveTextExtraction("paddle-ocr")}
             />
             <span>
-              <span className="font-medium">Local OCR</span>
+              <span className="font-medium">PaddleOCR</span>
               <span className="ml-1 text-sm text-gray-500">
-                — runs in browser, no network needed
+                — send to local PaddleOCR server (no API key needed)
               </span>
             </span>
           </label>
         </div>
+        {textExtraction === "paddle-ocr" && (
+          <div className="mt-3">
+            <label className="mb-1 block text-sm text-gray-600">
+              PaddleOCR Server URL
+            </label>
+            <div className="flex gap-2">
+              <input
+                type="text"
+                value={paddleOcrUrl}
+                onChange={(e) => setPaddleOcrUrl(e.target.value)}
+                placeholder="http://localhost:8866"
+                className="flex-1 rounded border px-3 py-2 text-sm"
+                data-testid="paddle-ocr-url-input"
+              />
+              <button
+                onClick={savePaddleOcrUrl}
+                disabled={paddleOcrUrl.trim() === savedPaddleOcrUrl}
+                className="rounded bg-blue-600 px-3 py-2 text-sm text-white hover:bg-blue-700 disabled:opacity-50"
+                data-testid="save-paddle-ocr-url"
+              >
+                Save
+              </button>
+            </div>
+            <p className="mt-1 text-xs text-gray-400">
+              Run PaddleOCR with: hub serving start -m ocr_system
+            </p>
+          </div>
+        )}
       </section>
 
       {/* Analysis Detail Level */}

@@ -2,6 +2,7 @@ import { useEffect, useState, useCallback, useRef } from "react";
 import { useParams, useNavigate, Link } from "react-router-dom";
 import { db, type TextRegion, type Analysis } from "./db";
 import { anthropic, cropImage } from "./claude-api";
+import { paddleOcrRegion } from "./paddle-ocr";
 import { createNavigate } from "./router";
 import { Logger } from "./logger";
 
@@ -40,6 +41,8 @@ export default function ReaderPage() {
   const [detected, setDetected] = useState(false);
   const [scanned, setScanned] = useState(false);
   const [hasApiKey, setHasApiKey] = useState(false);
+  const [textExtractionBackend, setTextExtractionBackend] =
+    useState<string>("ai-vision");
 
   // Box selection & editing
   const [selectedRegionId, setSelectedRegionId] = useState<number | null>(null);
@@ -93,9 +96,15 @@ export default function ReaderPage() {
         objectUrl = URL.createObjectURL(page.imageBlob);
         setImageUrl(objectUrl);
 
-        // Check for API key
-        const apiKeySetting = await db.settings.get("apiKey");
+        // Check for API key and text extraction backend
+        const [apiKeySetting, extractionSetting] = await Promise.all([
+          db.settings.get("apiKey"),
+          db.settings.get("textExtractionBackend"),
+        ]);
         setHasApiKey(!!apiKeySetting?.value);
+        if (extractionSetting?.value) {
+          setTextExtractionBackend(extractionSetting.value);
+        }
 
         // Load existing text regions and analyses
         const existingRegions = await db.textRegions
@@ -230,7 +239,10 @@ export default function ReaderPage() {
         setScanProgress(`Reading region ${i + 1}/${regions.length}...`);
 
         const cropped = await cropImage(page.imageBlob, entry.region.bbox);
-        const result = await anthropic.ocrRegion(cropped);
+        const result =
+          textExtractionBackend === "paddle-ocr"
+            ? await paddleOcrRegion(cropped)
+            : await anthropic.ocrRegion(cropped);
 
         // Update text in DB
         await db.textRegions.update(entry.region.id, { text: result.text });
@@ -261,7 +273,7 @@ export default function ReaderPage() {
       setScanning(false);
       setScanProgress("");
     }
-  }, [pageId, regions]);
+  }, [pageId, regions, textExtractionBackend]);
 
   const handleAnalyze = useCallback(async () => {
     if (!pageId || regions.length === 0) return;
@@ -528,7 +540,9 @@ export default function ReaderPage() {
         {detected && regions.length > 0 && !allHaveText && (
           <button
             onClick={handleReadText}
-            disabled={!hasApiKey || busy}
+            disabled={
+              (textExtractionBackend === "ai-vision" && !hasApiKey) || busy
+            }
             className="rounded-lg bg-indigo-600 px-4 py-2 text-sm text-white hover:bg-indigo-700 disabled:opacity-50"
             data-testid="read-text-btn"
           >
